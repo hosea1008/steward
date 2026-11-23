@@ -1,0 +1,39 @@
+{
+  "name": "@steward/dsh-tool-ego-real",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Workstation operation admission and native tools for the ego-real profile.",
+  "type": "module",
+  "main": "./lib/index.js",
+  "types": "./lib/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./provider": {
+      "types": "./lib/provider.d.ts",
+      "default": "./lib/provider.js"
+    }
+  },
+  "files": [
+    "lib"
+  ],
+  "dependencies": {
+    "@steward/dsh-ego": "workspace:*",
+    "@steward/http-json": "workspace:*",
+    "@steward/dsh-ego-runtime-client": "workspace:*"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.5",
+    "@deepseek-ai/dsh-tools": "0.2.1-rc.3",
+    "@deepseek-ai/dsh-attachment": "0.2.1-rc.3",
+    "@deepseek-ai/dsh-llm": "0.2.1-rc.3"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "4.0.5",
+    "@deepseek-ai/dsh-tools": "0.2.1-rc.3",
+    "@deepseek-ai/dsh-attachment": "0.2.1-rc.3",
+    "@deepseek-ai/dsh-llm": "0.2.1-rc.3"
+  }
+}

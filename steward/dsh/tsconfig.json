@@ -48,6 +48,9 @@
     },
     {
       "path": "packages/dsh-tool-rgbd-video-gen"
+    },
+    {
+      "path": "packages/dsh-tool-ego-real"
     }
   ]
 }

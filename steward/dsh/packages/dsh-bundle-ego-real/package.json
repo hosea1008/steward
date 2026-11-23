@@ -1,0 +1,21 @@
+{
+  "name": "@steward/dsh-bundle-ego-real",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Isolated workstation Ego Harness with native tools and a robot-local ER.",
+  "type": "module",
+  "files": [
+    "cordis.patch.yml"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "engines": {
+    "dsh": ">=0.2.1-rc.3 <0.3.0"
+  },
+  "dependencies": {
+    "@steward/dsh-tool-ego-real": "workspace:*"
+  }
+}

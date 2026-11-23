@@ -1,0 +1,21 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "lib"
+  },
+  "include": [
+    "src"
+  ],
+  "references": [
+    {
+      "path": "../dsh-ego"
+    },
+    {
+      "path": "../http-json"
+    },
+    {
+      "path": "../dsh-ego-runtime-client"
+    }
+  ]
+}

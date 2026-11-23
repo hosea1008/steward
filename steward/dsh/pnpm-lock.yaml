@@ -75,6 +75,12 @@ importers:
         specifier: workspace:*
         version: link:../dsh-tool-ego-capabilities
 
+  packages/dsh-bundle-ego-real:
+    dependencies:
+      '@steward/dsh-tool-ego-real':
+        specifier: workspace:*
+        version: link:../dsh-tool-ego-real
+
   packages/dsh-bundle-novelanything:
     dependencies:
       '@deepseek-ai/dsh-skill-filesystem':
@@ -266,6 +272,31 @@ importers:
       '@types/node':
         specifier: ^24.0.0
         version: 24.19.2
+
+  packages/dsh-tool-ego-real:
+    dependencies:
+      '@steward/dsh-ego':
+        specifier: workspace:*
+        version: link:../dsh-ego
+      '@steward/dsh-ego-runtime-client':
+        specifier: workspace:*
+        version: link:../dsh-ego-runtime-client
+      '@steward/http-json':
+        specifier: workspace:*
+        version: link:../http-json
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: 4.0.5
+        version: 4.0.5(@deepseek-ai/cordis-plugin-include@1.0.10)(@deepseek-ai/cordis-plugin-loader@1.0.6)
+      '@deepseek-ai/dsh-attachment':
+        specifier: 0.2.1-rc.3
+        version: 0.2.1-rc.3(@deepseek-ai/cordis@4.0.5)(@deepseek-ai/dsh-brand@0.2.1-rc.3(@deepseek-ai/cordis@4.0.5))
+      '@deepseek-ai/dsh-llm':
+        specifier: 0.2.1-rc.3
+        version: 0.2.1-rc.3(@deepseek-ai/cordis@4.0.5)
+      '@deepseek-ai/dsh-tools':
+        specifier: 0.2.1-rc.3
+        version: 0.2.1-rc.3(216a232736cc22d421973382c4e97320)
 
   packages/dsh-tool-novelanything:
     dependencies:

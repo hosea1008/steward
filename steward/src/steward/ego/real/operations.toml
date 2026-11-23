@@ -1,0 +1,5 @@
+[pick_black_box]
+description = "Pick up the big black box at the prepared workstation and hold."
+prompt = "Pick up the big black box and hold it steady with both arms."
+max_chunks = 13
+version = "1"

@@ -1,0 +1,82 @@
+#!/usr/bin/env python3
+"""Run one operator turn with a renewable control lease, or stop via the ER directly."""
+import argparse
+import os
+from pathlib import Path
+import signal
+import subprocess
+import sys
+from urllib.parse import urlparse
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "src"))
+from steward.net import call
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--stop", action="store_true", help="independent local stop, even when DSH is blocked")
+    parser.add_argument("--session-id", help="resume a session in the dedicated ego-real home")
+    parser.add_argument("--patch", type=Path, help="trusted deployment/model configuration overlay")
+    parser.add_argument("task", nargs="?")
+    args = parser.parse_args()
+    endpoint = os.environ.get("STEWARD_REAL_ENDPOINT", "http://127.0.0.1:7421").rstrip("/")
+    if urlparse(endpoint).scheme != "http" or urlparse(endpoint).hostname not in ("127.0.0.1", "localhost", "::1"):
+        parser.error("this deployment requires a trusted robot-local ER on loopback")
+    if args.stop:
+        if args.task:
+            parser.error("--stop takes no task")
+        result = call("POST", endpoint + "/skill/stop", {}, timeout=3)
+        print(result)
+        return 0 if result["hold_confirmed"] and not result["fault"] else 1
+    if not args.task:
+        parser.error("an operator task is required")
+    home = Path(os.environ.get("STEWARD_REAL_HOME", ROOT / "var/dsh/ego-real")).resolve()
+    if not (home / "profiles/ego-real/package.json").is_file():
+        parser.error("run scripts/setup-real-ego-profile.sh first")
+    cmd = [str(ROOT / "dsh/node_modules/.bin/dsh"), "--profile", "ego-real"]
+    # Keep the real EA route deployment-owned. Without an explicit route the upstream
+    # headless template can silently select its default model for the operator's task.
+    model_patch = args.patch or home / "ea-model.patch.yml"
+    if not model_patch.is_file():
+        parser.error(f"configure {model_patch} or pass --patch (see config/ego-real-ea-model.example.yml)")
+    cmd.extend(["--patch", str(model_patch.resolve(strict=True))])
+    if args.session_id:
+        cmd.extend(["--session-id", args.session_id])
+    cmd.extend(["--", args.task])
+    workspace = home / "workspace"
+    workspace.mkdir(exist_ok=True)
+    # Each host receives a fresh owner token. The model never supplies it as a tool argument.
+    lease = call("POST", endpoint + "/control/acquire", {})
+    env = dict(os.environ, DSH_HOME=str(home), STEWARD_REAL_OWNER=lease["owner"], STEWARD_REAL_ENDPOINT=endpoint)
+    body = {"owner": lease["owner"]}
+    child = None
+    try:
+        child = subprocess.Popen(cmd, cwd=workspace, env=env)
+        while True:
+            try:
+                return child.wait(timeout=lease["lease_s"] / 3)
+            except subprocess.TimeoutExpired:
+                call("POST", endpoint + "/control/renew", body, timeout=lease["lease_s"] / 3)
+    finally:
+        try:
+            handoff = call("POST", endpoint + "/control/release", body, timeout=3)
+            if not handoff["hold_confirmed"] or handoff["fault"]:
+                raise RuntimeError(f"handoff needs operator attention: {handoff}")
+            if handoff["stopped"]:
+                raise RuntimeError(f"task host stopped unfinished job {handoff['stopped']} on exit")
+        finally:
+            if child is not None and child.poll() is None:
+                child.terminate()
+                try:
+                    child.wait(timeout=3)
+                except subprocess.TimeoutExpired:
+                    child.kill()
+                    child.wait()
+
+
+if __name__ == "__main__":
+    def interrupt(*_):
+        raise KeyboardInterrupt
+    signal.signal(signal.SIGTERM, interrupt)
+    sys.exit(main())

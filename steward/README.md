@@ -2,6 +2,8 @@
 
 English | [中文](README.zh.md)
 
+See the [ego-real workstation guide](src/steward/ego/real/README.md) for the isolated profile, fake-device validation and hardware integration status.
+
 For `steward-bot`, `place` with `flip: true` turns the held object over before release on either a support or the floor. The default roll cap permits a half turn and is intersected with the robot model's declared joint limits; explicit narrower caps remain effective. Floor rotation checks the extension, wrist rotation and lowering path from measured joints. An unreachable path is rejected before execution; a successful floor placement does not silently discard `flip`.
 
 The robot Ego Harness can use the `rgbd_video_gen` and `NovelAnything` skills for remote novel-view synthesis. `scripts/setup-dsh-profiles.sh` (Linux/macOS) and `scripts/setup-dsh-profiles.ps1` (Windows) install both into the robot profile; on Windows, `scripts/setup-rgbd-video-gen.ps1` and `scripts/setup-novelanything.ps1` add them to an existing one. See the [rgbd_video_gen guide](dsh/packages/dsh-bundle-rgbd-video-gen/README.md) and [NovelAnything guide](dsh/packages/dsh-bundle-novelanything/README.md).

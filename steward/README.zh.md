@@ -2,6 +2,8 @@
 
 [English](README.md) | 中文
 
+独立工位 profile `ego-real` 的启动方式、假设备验收与真机适配边界见[运行与交接说明](src/steward/ego/real/README.md)。
+
 `steward-bot` 的 `place` 在设置 `flip: true` 时，会先翻转持物，再释放到支撑面或地面。默认腕部转角上限允许半圈翻转，并与机器人模型声明的关节限位取交集；显式配置的更小上限仍然有效。地面旋转会从实测关节状态检查伸臂、转腕及下降路径；不可达时在执行前拒绝，不会忽略 `flip` 后仍返回放置成功。
 
 机器人 Ego Harness 可选用 `rgbd_video_gen` 和 `NovelAnything` 两个 skill 调用远程新视角生成服务。`scripts/setup-dsh-profiles.sh`（Linux/macOS）和 `scripts/setup-dsh-profiles.ps1`（Windows）会在机器人 profile 中安装两者；Windows 上也可用 `scripts/setup-rgbd-video-gen.ps1`、`scripts/setup-novelanything.ps1` 加到已有 profile。使用方法见 [rgbd_video_gen](dsh/packages/dsh-bundle-rgbd-video-gen/README.zh.md) 和 [NovelAnything](dsh/packages/dsh-bundle-novelanything/README.zh.md)。

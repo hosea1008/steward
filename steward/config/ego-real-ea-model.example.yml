@@ -1,0 +1,24 @@
+# ego-real 专用，复制到 $STEWARD_REAL_HOME/ea-model.patch.yml。
+# GPT Astra 接入时用部署方给出的真实 provider ID 和 model ID；
+# “GPT Astra”是计划使用的模型名称，不能据此推断 API 协议、URL 或模型标识。
+# 此项只选择 EA 的推理模型；ER 连接的 Cosmos WAM 不在这里配置。
+- id: agent-default-model
+  config:
+    provider: !!js "process.env.STEWARD_REAL_EA_PROVIDER || (() => { throw Error('Set STEWARD_REAL_EA_PROVIDER') })()"
+    model: !!js "process.env.STEWARD_REAL_EA_MODEL || (() => { throw Error('Set STEWARD_REAL_EA_MODEL') })()"
+
+# 已在这个 DSH profile 注册 provider 时，只需填写上面的路由。
+# 若部署确认提供 Chat Completions 兼容网关，可在本文件启用下面的注册，
+# 同时令 STEWARD_REAL_EA_PROVIDER=workstation-vision。凭据只通过环境引用。
+# 若部署提供其他协议，按对应 DSH provider 注册，保留相同的 agent-default-model 入口。
+#
+# - id: llm-pi-ai
+#   config:
+#     providers:
+#       workstation-vision:
+#         api: openai-completions
+#         baseURL: !!js process.env.STEWARD_REAL_EA_BASE_URL
+#         apiKeyEnv: STEWARD_REAL_EA_API_KEY
+#         models:
+#           - id: !!js process.env.STEWARD_REAL_EA_MODEL
+#             input: [text, image]
