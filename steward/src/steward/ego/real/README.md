@@ -1,5 +1,7 @@
 # ego-real 工位运行与交接
 
+[真机控制台](console/README.md) 在本机 `8400/console` 提供配置选择、实时相机、连接状态与调试日志。
+
 `ego-real` 使用机器人项目锁定的 DSH，独立的 profile、会话目录及 ER 进程。可执行的验收后端为 `--backend fake`。合成相机图和模拟驱动均在本进程内；启动器要求显式选择后端。抓黑盒的操作 ID 为 `pick_black_box`，固定英文指令和 13 个 chunk 的预算在 [operations.toml](operations.toml)。最终现场验收需要真机配置、驱动反馈与抓取记录。
 
 ```text

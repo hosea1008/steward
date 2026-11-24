@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Steward · 真机控制台</title>
+<link rel="stylesheet" href="/console/style.css">
+<script type="module" src="/console/app.js"></script>
+</head>
+<body>
+<header>
+  <h1>Steward <span data-i18n="title"></span></h1>
+  <label class="sr-only" for="robot" data-i18n="configuration"></label>
+  <select id="robot"></select>
+  <button id="connect" data-i18n="connect"></button>
+  <button id="disconnect" disabled data-i18n="disconnect"></button>
+  <span id="phase" class="pill"></span>
+  <span class="spacer"></span><span class="local" data-i18n="local"></span>
+</header>
+<main>
+  <div id="error" class="notice error" role="alert" hidden></div>
+  <section class="identity card">
+    <div><div class="eyebrow" data-i18n="workspace"></div><h2 id="robot-name">Agilex Cobot Magic</h2><p id="description"></p></div>
+    <div class="identity-status"><span class="dot"></span><span data-i18n="readOnly"></span></div>
+  </section>
+  <div class="layout">
+    <div class="left-column">
+      <section class="card cameras-section">
+        <div class="section-title"><h2 data-i18n="cameras"></h2><span id="camera-count" class="muted"></span><span class="spacer"></span><span class="muted" id="camera-rate"></span></div>
+        <div id="cameras" class="camera-grid"></div>
+      </section>
+      <section class="card">
+        <div class="section-title"><h2 data-i18n="connections"></h2><span class="muted" data-i18n="connectionHint"></span></div>
+        <div id="devices" class="device-grid"></div>
+        <details class="configuration"><summary data-i18n="configurationDetails"></summary><pre id="config-json"></pre></details>
+      </section>
+      <section class="card log-card">
+        <div class="section-title"><h2 data-i18n="debugLogs"></h2><span id="log-count" class="pill">0</span><span class="spacer"></span>
+          <label class="sr-only" for="level" data-i18n="logLevel"></label>
+          <select id="level"><option>DEBUG</option><option>INFO</option><option>WARNING</option><option>ERROR</option></select>
+          <label class="sr-only" for="filter" data-i18n="filter"></label><input id="filter" type="search" data-placeholder="filter">
+          <button id="follow" aria-pressed="true" data-i18n="follow"></button>
+        </div>
+        <div id="logs" class="logs" role="log" aria-label="Debug logs"></div>
+      </section>
+    </div>
+    <section class="card chat">
+      <div class="section-title"><span class="dot orange"></span><h2 data-i18n="operator"></h2><span class="spacer"></span><span class="pill" data-i18n="robotOnly"></span></div>
+      <div class="agent-status"><span class="dot"></span><span data-i18n="agentPending"></span></div>
+      <div id="messages" class="messages" role="log" aria-label="Robot conversation">
+        <div class="welcome"><div class="welcome-icon">S</div><h3 data-i18n="welcomeTitle"></h3><p data-i18n="welcomeBody"></p></div>
+      </div>
+      <div class="notice" id="chat-hint" data-i18n="chatHint"></div>
+      <form id="composer" class="composer">
+        <label class="sr-only" for="message" data-i18n="message"></label>
+        <textarea id="message" rows="3" data-placeholder="messagePlaceholder" aria-describedby="chat-hint"></textarea>
+        <button id="send" type="submit" disabled data-i18n="send"></button>
+      </form>
+      <div class="composer-note" data-i18n="draftHint"></div>
+    </section>
+  </div>
+  <footer><span data-i18n="footer"></span><span id="updated"></span></footer>
+</main>
+</body>
+</html>
