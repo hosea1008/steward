@@ -5,7 +5,8 @@
   "description": "Isolated workstation Ego Harness with native tools and a robot-local ER.",
   "type": "module",
   "files": [
-    "cordis.patch.yml"
+    "cordis.patch.yml",
+    "skills"
   ],
   "dsh": {
     "bundle": {

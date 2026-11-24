@@ -9,9 +9,10 @@ import tempfile
 from steward.net import HttpError
 from steward.world.chat import ChatConfig, HarnessChat, _Agent, load_env_file
 from ..motion import Motion
+from .skills import SkillCatalog
 
 ROOT = Path(__file__).resolve().parents[5]
-SYSTEM_PROMPT = '你是 Steward 真机 Ego Harness。只调用已注册的机器人工具执行操作员任务，不编写或执行代码，不创建工具。'
+SYSTEM_PROMPT = '你是 Steward 真机 Ego Harness。按已加载的真机 skill 规程组合已注册工具执行操作员任务；匹配技能目录时先用 skill 工具加载全文。不编写或执行代码，不创建工具。'
 MAX_CONTEXT_CHARS = 64000
 BRIEF = (
     '你是 Steward 真机操作员助手，当前机器人配置为 {name}。只依据操作员提供的任务和工具反馈行动。\n'
@@ -32,6 +33,7 @@ class RealChat(HarnessChat):
 
     def __init__(self, config, motion, home, env_file):
         super().__init__(None, lambda: '')
+        self.skills = SkillCatalog()
         self.config = ChatConfig(dsh=ROOT/'dsh/node_modules/.bin/dsh', cwd=home/'workspace',
                                  env_file=env_file, robot_home=home, timeout_s=900, stop_wait_s=25)
         self.context_path = home/'task-context'/f"{config['id']}.txt"
@@ -45,8 +47,7 @@ class RealChat(HarnessChat):
             extra_reason=lambda: None if (os.environ | load_env_file(env_file)).get('DEEPSEEK_API_KEY')
             else '缺少 DEEPSEEK_API_KEY，请设置环境变量或使用 --key-file')
 
-    @staticmethod
-    def patch(motion):
+    def patch(self, motion):
         """Expose registered tools as native function calls; no code execution runtime."""
         rows = [
             {'id': 'steward-real-runtime', 'disabled': True},
@@ -57,6 +58,10 @@ class RealChat(HarnessChat):
                 {'id': 'steward-motion-tools', 'name': '@steward/dsh-tool-ego-real/motion'},
             ]},
             {'id': 'tools', 'config': {'mode': 'native'}},
+            {'id': 'tool-skill', 'disabled': False},
+            {'id': 'skill-filesystem', 'disabled': False, 'config': {
+                'providerName': 'steward-real-skills', 'includeDefaultRoots': False,
+                'watch': False, 'bundledSkillDir': self.skills.directory}},
             {'id': 'ptc-runtime', 'disabled': True},
             {'id': 'workflow-ptc', 'disabled': True},
             {'id': 'system-prompt', 'config': {'includeHarnessIdentity': False,
@@ -67,6 +72,11 @@ class RealChat(HarnessChat):
                 'apiKeyEnv': 'DEEPSEEK_API_KEY'}}}},
         ]
         return '\n'.join('- ' + json.dumps(row, ensure_ascii=False) for row in rows) + '\n'
+
+    def close(self):
+        """Stop owned model turns before removing their skill instruction snapshot."""
+        self.stop()
+        self.skills.close()
 
     def context(self):
         """Return the saved context used by subsequent operator turns."""
@@ -156,7 +166,7 @@ class ConsoleAgent:
         agent = chat['agents']['robot']
         return {**agent, 'connected': agent['available'], 'messages': chat['messages'], 'motion': self.motion.state(),
                 'system_prompt': SYSTEM_PROMPT, 'operator_brief': self.chat.agents['robot'].brief,
-                'task_context': self.chat.context()}
+                'task_context': self.chat.context(), 'skills': self.chat.skills.summaries()}
 
     def set_context(self, text, previous):
         """Persist the next turn's context for this robot configuration."""
@@ -180,4 +190,5 @@ class ConsoleAgent:
     def close(self):
         """Do not discard a runtime whose stop has not settled."""
         self.stop()
+        self.chat.close()
         self.motion.close()

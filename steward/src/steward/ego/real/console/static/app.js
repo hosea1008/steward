@@ -118,6 +118,32 @@ function renderAgentContext(agent) {
   $('context-reload').disabled = !available || contextSaving || !contextDirty;
   $('context-status').textContent = t(!available ? 'contextLoadFirst' : agent.busy ? 'contextBusy' : conflict ? 'contextConflict' : contextDirty ? 'contextDirty' : 'contextSaved');
 }
+function renderSkills(agent) {
+  const entries = agent.skills || [], container = $('supported-skills'), current = state.generation;
+  const signature = JSON.stringify([current, entries]);
+  if (container.dataset.skills === signature) return;
+  container.dataset.skills = signature;
+  $('skill-count').textContent = entries.length;
+  container.replaceChildren(...entries.map(skill => {
+    const row = el('details', 'device skill-card'), heading = el('summary', '', skill.name);
+    const text = el('pre', 'skill-text', t('skillLoading'));
+    row.append(heading, el('p', 'device-detail', skill.description), text);
+    let loaded = false, loading = false;
+    row.addEventListener('toggle', async () => {
+      if (!row.open || loaded || loading) return;
+      loading = true; text.textContent = t('skillLoading');
+      try {
+        const detail = await api('/api/skill?' + new URLSearchParams({name: skill.name, generation: current}));
+        if (state.generation !== current || !row.isConnected) return;
+        text.textContent = detail.text; loaded = true;
+      } catch (err) {
+        text.textContent = t('skillLoadFailed') + ': ' + err.message;
+      } finally { loading = false; }
+    });
+    return row;
+  }));
+  if (!entries.length) container.append(el('p', 'muted', t('skillsEmpty')));
+}
 const tabs = [...document.querySelectorAll('.agent-tabs [role="tab"]')];
 function activateTab(tab) {
   $('new-session').hidden = tab.id !== 'tab-conversation';
@@ -167,7 +193,7 @@ function render(s) {
   $('updated').textContent = `${t('updated')} ${time(Date.now()/1000)}`;
   appendEvents(s.events);
   renderChat(s.agent);
-  renderTools(s.agent); renderAgentContext(s.agent);
+  renderTools(s.agent); renderSkills(s.agent); renderAgentContext(s.agent);
 }
 function renderChat(agent) {
   $('agent-status').textContent = !agent.connected ? t('agentPending') : agent.busy ? t('agentBusy') : t('agentReady');

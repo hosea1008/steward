@@ -185,6 +185,13 @@ class Console:
                 raise HttpError(409, '请先加载配置并启用 Agent')
             return self.agent.send(text)
 
+    def skill_detail(self, name, generation):
+        """Expose only the selected agent's skill snapshot, rejecting stale configuration views."""
+        with self.lifecycle, self.lock:
+            if self.phase != 'connected' or self.agent is None or generation != self.generation:
+                raise HttpError(409, '真机配置已切换或断开，请刷新后再查看 skill')
+            return self.agent.chat.skills.detail(name)
+
     def stop_agent(self):
         """Cancel the operator turn and return the motion runtime's stop report."""
         with self.lifecycle:

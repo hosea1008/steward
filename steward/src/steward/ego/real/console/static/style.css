@@ -453,6 +453,10 @@ pre {
   max-height:300px;
   overflow:auto;
 }
+.skill-list { display:grid; gap:8px; min-width:0; }
+.skill-card { min-width:0; }
+.skill-card summary { font-weight:600; }
+.skill-text { max-height:420px; overflow:auto; padding:10px; background:var(--inset); border-radius:6px; }
 .messages {
   flex:1;
   min-height:180px;

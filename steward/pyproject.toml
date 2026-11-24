@@ -13,7 +13,7 @@ dependencies = [
 
 [project.optional-dependencies]
 providers = ["requests>=2.31"]
-real = ["websocket-client>=1.8,<2"]
+real = ["websocket-client>=1.8,<2", "PyYAML>=6,<7"]
 
 [project.scripts]
 steward = "steward.cli:main"

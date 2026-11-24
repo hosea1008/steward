@@ -53,6 +53,7 @@ def make_server(console: Console, port: int = 8400, host: str = '0.0.0.0') -> Js
         ('GET', '/console/i18n.js'): asset('i18n.js', 'text/javascript; charset=utf-8'),
         ('GET', '/api/configs'): lambda q, b: {'configs': list(console.configs.values())},
         ('GET', '/api/state'): lambda q, b: console.state(number(q, 'since')),
+        ('GET', '/api/skill'): lambda q, b: console.skill_detail(q.get('name', ''), number(q, 'generation')),
         ('POST', '/api/connect'): load,
         ('POST', '/api/disconnect'): lambda q, b: console.unload(),
         ('GET', '/api/camera/frame'): frame,

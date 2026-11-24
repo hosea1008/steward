@@ -14,6 +14,8 @@ Build with `pnpm --dir steward/dsh run build` from the repository root. The reco
 
 ## 添加真机工具的流程
 
+用现有工具组成任务规程时，优先添加 [Harness skill](../dsh-bundle-ego-real/README.md#添加真机-skill)。技能自动进入真机技能目录，不应为了展示规程而再注册一个同名运动工具。
+
 调用路径固定为：模型工具 → `ctx.ego` 服务接口 → 真机 provider → Python 运行时 → 设备驱动。模型工具只依赖服务定义，不能直接请求 HTTP、打开设备、读取设备凭据或用 `instanceof` 依赖某个具体 provider。Task context 中的物料位置等资料也不属于工具实现。
 
 1. **定义服务能力。** 在 [dsh-ego 服务定义](../dsh-ego/src/index.ts) 中声明参数、返回值和取消语义。导航和升降使用可选的 `EgoMotion` 能力，只读导航查询使用独立的可选 `EgoNavigation`；其他 provider 未实现该能力时不应伪造支持。工具插件必须在注册前检查所需能力，缺失时明确报错。新的能力不应为了复用接口而冒充 ESim 预测。

@@ -60,6 +60,10 @@ NAVIS 驱动同时检查 `/agx_smach_state` 的任务调度状态和 `/run_manag
 
 相机从 `snapshot_url` 按 `refresh_fps` 采样 JPEG，结合 `camera_status_url` 中 `topics[status_key]` 判断画面是否有效。上游离线或超时显示遮罩，不显示假实时图。`stream_url` 保留原始合并 MJPEG 入口。日志和网页展示缓存有界；DSH 会话记录保存在所选 home，后续消息延续同一会话，断开配置后建立新会话。
 
+## 真机 Skills
+
+“已支持的工具”下方的“已支持的 Skills”展示当前机器人连接的技能目录，点击名称可展开完整 `SKILL.md` 文本。当前提供 `manhattan-navigation`；可输入“按曼哈顿路径导航到地图中的 x=…、y=…、朝向=…”。目标值来自操作员或 task context。原生 Harness 在模型请求开始时提供技能摘要，再由模型调用 `skill` 加载正文；无需开放现场编程。网页和模型使用连接时的同一份技能快照，新增或修改技能后需要重新连接配置。后续开发步骤、自动发现范围和验证方法见[真机 skills 接入说明](../../../../../dsh/packages/dsh-bundle-ego-real/README.md#添加真机-skill)。
+
 ## Task context 的保存和发送
 
 在右侧 `Task context` 中编辑资料，点击“保存上下文”。只有保存后的内容进入模型请求，未保存草稿不会覆盖已保存内容。执行任务期间不能修改；其他页面修改后，陈旧编辑会被拒绝，可用“恢复已保存内容”加载最新版本。清空编辑框并保存即可清除当前上下文。
@@ -73,7 +77,7 @@ NAVIS 驱动同时检查 `/agx_smach_state` 的任务调度状态和 `/run_manag
 ## 不移动真机的验证
 
 ```sh
-PYTHONPATH=steward/src python3 -m pytest --noconftest -q steward/tests/test_real_motion.py steward/tests/test_real_console.py
+PYTHONPATH=steward/src python3 -m pytest --noconftest -q steward/tests/test_real_motion.py steward/tests/test_real_console.py steward/tests/test_real_skills.py
 pnpm --dir steward/dsh run build
 STEWARD_PYTHON=python3 node --test steward/dsh/test/ego-motion.test.mjs
 node --check steward/src/steward/ego/real/console/static/app.js

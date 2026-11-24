@@ -39,4 +39,4 @@ try:
     third = turn('新会话仅检查独立历史。')
     print(json.dumps({'first': first, 'second': second, 'third': third}, ensure_ascii=False))
 finally:
-    chat.stop_turn('robot')
+    chat.close()
