@@ -34,6 +34,53 @@ export interface JsonObject {
   [key: string]: unknown
 }
 
+/** Absolute navigation target in the already loaded and localized map. Speeds are runtime-owned. */
+export interface NavigateToPoseRequest {
+  x: number
+  y: number
+  heading_deg: number
+  map_name: string
+  timeout_s: number
+  position_tolerance_m: number
+  heading_tolerance_deg: number
+}
+
+/** Lift height in millimetres, or explicit downward homing. The runtime validates action-specific fields. */
+export interface LiftMoveRequest {
+  action: 'height' | 'home'
+  height_mm?: number
+  timeout_s: number
+}
+
+/** Acknowledgement of one current software fault after operator inspection; no hardware reset. */
+export interface ClearMotionFaultRequest {
+  fault_id: string
+  operator_confirmed_stopped: boolean
+  reason: string
+}
+
+/** Optional parameterized motion capability; it does not imply ESim prediction support. */
+export interface EgoMotion {
+  /** Move to a map pose and wait for execution feedback.
+   * @param request - target, tolerances and execution deadline.
+   * @param signal - cancellation propagated to the runtime; cancellation is not proof of physical rest.
+   * @returns runtime outcome; inspect its state before dependent work and never retry an uncertain outcome automatically.
+   */
+  navigateToPose(request: NavigateToPoseRequest, signal?: AbortSignal): Promise<JsonObject>
+  /** Set an absolute lift height or explicitly establish zero.
+   * @param request - action, optional height and execution deadline.
+   * @param signal - cancellation propagated to the runtime.
+   * @returns runtime outcome including failure and available stop feedback.
+   */
+  moveLift(request: LiftMoveRequest, signal?: AbortSignal): Promise<JsonObject>
+  /** Clear only the identified software latch while retaining failure evidence.
+   * @param request - current fault identity, operator stop confirmation and inspection reason.
+   * @param signal - caller cancellation; after a lost response, inspect state instead of assuming failure.
+   * @returns whether a latch was cleared; hardware state, motion admission and previous results are unchanged.
+   */
+  clearFault(request: ClearMotionFaultRequest, signal?: AbortSignal): Promise<JsonObject>
+}
+
 /** Skills the Ego Runtime can predict and run. */
 export type EgoSkill = 'regrasp_upright' | 'assemble_onto' | 'fasten_onto' | 'seat_screw' | 'drive_screw' | 'flip_assembly' | 'insert_screw_into_hole' | 'navigate' | 'pick' | 'place' | 'pour' | 'open' | 'close'
 
@@ -270,6 +317,9 @@ export class EgoError extends Error {
  * stop waiting when it aborts.
  */
 export abstract class EgoService extends Service {
+  /** Present only when the provider supports parameterized motion; consumers must check before registration. */
+  readonly motion?: EgoMotion
+
   constructor(ctx: Context) {
     super(ctx, 'ego')
   }

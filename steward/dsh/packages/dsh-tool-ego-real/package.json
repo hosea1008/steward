@@ -14,6 +14,14 @@
     "./provider": {
       "types": "./lib/provider.d.ts",
       "default": "./lib/provider.js"
+    },
+    "./motion": {
+      "types": "./lib/motion.d.ts",
+      "default": "./lib/motion.js"
+    },
+    "./motion-provider": {
+      "types": "./lib/motion-provider.d.ts",
+      "default": "./lib/motion-provider.js"
     }
   },
   "files": [
@@ -28,12 +36,14 @@
     "@deepseek-ai/cordis": "^4.0.5",
     "@deepseek-ai/dsh-tools": "0.2.1-rc.3",
     "@deepseek-ai/dsh-attachment": "0.2.1-rc.3",
-    "@deepseek-ai/dsh-llm": "0.2.1-rc.3"
+    "@deepseek-ai/dsh-llm": "0.2.1-rc.3",
+    "@deepseek-ai/schemastery": "^3.18.5"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "4.0.5",
     "@deepseek-ai/dsh-tools": "0.2.1-rc.3",
     "@deepseek-ai/dsh-attachment": "0.2.1-rc.3",
-    "@deepseek-ai/dsh-llm": "0.2.1-rc.3"
+    "@deepseek-ai/dsh-llm": "0.2.1-rc.3",
+    "@deepseek-ai/schemastery": "3.18.5"
   }
 }

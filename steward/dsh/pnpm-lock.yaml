@@ -297,6 +297,9 @@ importers:
       '@deepseek-ai/dsh-tools':
         specifier: 0.2.1-rc.3
         version: 0.2.1-rc.3(216a232736cc22d421973382c4e97320)
+      '@deepseek-ai/schemastery':
+        specifier: 3.18.5
+        version: 3.18.5
 
   packages/dsh-tool-novelanything:
     dependencies:

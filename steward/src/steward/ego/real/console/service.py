@@ -13,11 +13,13 @@ from .adapters import BOOT_ADAPTERS, fetch, read_json
 class Console:
     """Own one selected robot connection; unload joins readers before discarding frames."""
 
-    def __init__(self, configs: dict[str, dict]):
+    def __init__(self, configs: dict[str, dict], *, agent_factory=None):
         for config in configs.values():
             if config['model'] not in BOOT_ADAPTERS:
                 raise ValueError(f"没有该型号的启动适配器: {config['model']}")
         self.configs = configs
+        self.agent_factory = agent_factory
+        self.agent = None
         self.lock = threading.RLock()
         self.lifecycle = threading.Lock()
         self.events = deque(maxlen=1000)
@@ -72,13 +74,15 @@ class Console:
                 if self.cancel.is_set():
                     return
                 self.devices = devices
+                if self.agent_factory:
+                    self.agent = self.agent_factory(config, self.emit)
                 for camera in config['cameras']:
                     reader = threading.Thread(target=self._camera, args=(camera,),
                                               name='real-camera-' + camera['id'], daemon=True)
                     self.readers.append(reader)
                     reader.start()
                 self.phase = 'connected'
-            self.emit('INFO', 'boot', '连接入口已建立，正在检查实时画面；运动工具未接入')
+            self.emit('INFO', 'boot', '连接入口已建立，正在检查实时画面')
             while not self.cancel.is_set():
                 self._health(config)
                 self.cancel.wait(config['health_interval_s'])
@@ -171,11 +175,39 @@ class Console:
             return dict(phase=self.phase, generation=self.generation, config=self.config,
                         devices=list(self.devices), cameras=cameras, runtime=self.runtime,
                         runtime_error=self.runtime_error,
-                        agent={'connected': False, 'reason': 'Agent 对话后端尚未接入，导航与操作工具将在后续接入'},
+                        agent=self.agent.state() if self.agent else {'connected': False, 'reason': 'Agent 未启用或配置尚未加载', 'messages': []},
                         events=[e for e in self.events if e['id'] > since], cursor=self.sequence)
 
+    def chat(self, text):
+        """Accept messages only while the selected configuration remains connected."""
+        with self.lifecycle, self.lock:
+            if self.phase != 'connected' or self.agent is None:
+                raise HttpError(409, '请先加载配置并启用 Agent')
+            return self.agent.send(text)
+
+    def stop_agent(self):
+        """Cancel the operator turn and return the motion runtime's stop report."""
+        with self.lifecycle:
+            if self.agent is None:
+                raise HttpError(409, 'Agent 未启用')
+            return self.agent.stop()
+
+    def new_session(self, generation):
+        """Serialize a conversation reset against sends and configuration changes."""
+        with self.lifecycle, self.lock:
+            if self.phase != 'connected' or self.agent is None or generation != self.generation:
+                raise HttpError(409, '真机配置已切换或断开，请刷新后再新建会话')
+            return self.agent.new_session()
+
+    def set_context(self, text, previous, generation):
+        """Reject edits for a disconnected or replaced robot before persisting task context."""
+        with self.lifecycle, self.lock:
+            if self.phase != 'connected' or self.agent is None or generation != self.generation:
+                raise HttpError(409, '真机配置已切换或断开，请刷新后再保存')
+            return self.agent.set_context(text, previous)
+
     def unload(self):
-        """Release console subscriptions only; never stop or disconnect hardware services."""
+        """Cancel owned motion and conversation before releasing camera subscriptions."""
         with self.lifecycle:
             self._unload()
 
@@ -186,6 +218,9 @@ class Console:
             self.phase = 'disconnecting'
         if worker:
             worker.join()
+        if self.agent:
+            self.agent.close()
+            self.agent = None
         for reader in self.readers:
             reader.join()
         with self.lock:
@@ -199,7 +234,7 @@ class Console:
             self.runtime_error = None
             self.phase = 'idle'
             self.generation += 1
-        self.emit('INFO', 'console', '已断开控制台连接；机器人及现场服务保持原状态')
+        self.emit('INFO', 'console', '已断开控制台连接；本控制台发起的任务已结束')
 
     def close(self):
         """Reject future loads and wait for all console-owned readers to settle."""

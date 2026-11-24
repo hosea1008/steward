@@ -72,6 +72,17 @@ def validate(value: dict) -> dict:
     _url(nav.get('http_url'), 'navigation.http_url')
     _url(nav.get('websocket_url'), 'navigation.websocket_url', ('ws', 'wss'))
     _text(nav.get('map'), 'navigation.map')
+    _text(nav.get('username'), 'navigation.username')
+    _identifier(nav.get('password_env'), 'navigation.password_env')
+    lift = value.get('lift')
+    if not isinstance(lift, dict):
+        raise ValueError('lift 必须为对象')
+    if not _text(lift.get('port'), 'lift.port').startswith('/dev/'):
+        raise ValueError('lift.port 必须是 /dev/ 下的设备地址')
+    if type(lift.get('motor_id')) is not int or not 1 <= lift['motor_id'] <= 247:
+        raise ValueError('lift.motor_id 必须在 1–247 之间')
+    if type(lift.get('serial_timeout_s')) not in (int, float) or not .05 <= lift['serial_timeout_s'] <= 1:
+        raise ValueError('lift.serial_timeout_s 必须在 0.05–1 之间')
     for field, low, high in [('refresh_fps', 1, 30), ('health_interval_s', .2, 60),
                              ('request_timeout_s', .1, 10), ('stale_after_s', 1, 120)]:
         number = value.get(field)

@@ -5,15 +5,58 @@
   "description": "移动底盘 · 升降柱 · 双 Piper 机械臂 · 三路 RGB 相机",
   "camera_status_url": "http://127.0.0.1:5000/api/camera/status",
   "cameras": [
-    {"id": "head", "name": "头部相机", "topic": "/camera_f/color/image_raw", "status_key": "f", "stream_url": "http://127.0.0.1:5000/api/camera/stream", "snapshot_url": "http://127.0.0.1:5000/api/camera/snapshot/front"},
-    {"id": "left_wrist", "name": "左腕相机", "topic": "/camera_l/color/image_raw", "status_key": "l", "stream_url": "http://127.0.0.1:5000/api/camera/stream", "snapshot_url": "http://127.0.0.1:5000/api/camera/snapshot/left"},
-    {"id": "right_wrist", "name": "右腕相机", "topic": "/camera_r/color/image_raw", "status_key": "r", "stream_url": "http://127.0.0.1:5000/api/camera/stream", "snapshot_url": "http://127.0.0.1:5000/api/camera/snapshot/right"}
+    {
+      "id": "head",
+      "name": "头部相机",
+      "topic": "/camera_f/color/image_raw",
+      "status_key": "f",
+      "stream_url": "http://127.0.0.1:5000/api/camera/stream",
+      "snapshot_url": "http://127.0.0.1:5000/api/camera/snapshot/front"
+    },
+    {
+      "id": "left_wrist",
+      "name": "左腕相机",
+      "topic": "/camera_l/color/image_raw",
+      "status_key": "l",
+      "stream_url": "http://127.0.0.1:5000/api/camera/stream",
+      "snapshot_url": "http://127.0.0.1:5000/api/camera/snapshot/left"
+    },
+    {
+      "id": "right_wrist",
+      "name": "右腕相机",
+      "topic": "/camera_r/color/image_raw",
+      "status_key": "r",
+      "stream_url": "http://127.0.0.1:5000/api/camera/stream",
+      "snapshot_url": "http://127.0.0.1:5000/api/camera/snapshot/right"
+    }
   ],
-  "arms": [{"id": "left", "name": "左机械臂", "device": "can_left"}, {"id": "right", "name": "右机械臂", "device": "can_right"}],
-  "navigation": {"http_url": "http://192.168.1.102/apiUrl", "websocket_url": "ws://192.168.1.102:9090", "map": "B308-V3"},
+  "arms": [
+    {
+      "id": "left",
+      "name": "左机械臂",
+      "device": "can_left"
+    },
+    {
+      "id": "right",
+      "name": "右机械臂",
+      "device": "can_right"
+    }
+  ],
+  "navigation": {
+    "http_url": "http://192.168.1.102/apiUrl",
+    "websocket_url": "ws://192.168.1.102:9090",
+    "map": "B308-V3",
+    "username": "admin",
+    "password_env": "STEWARD_NAV_PASSWORD"
+  },
   "runtime_url": "http://127.0.0.1:7421",
   "refresh_fps": 10,
   "health_interval_s": 2,
   "request_timeout_s": 2,
-  "stale_after_s": 5
+  "stale_after_s": 5,
+  "lift": {
+    "port": "/dev/serial/by-id/usb-1a86_USB_Serial-if00-port0",
+    "motor_id": 1,
+    "serial_timeout_s": 0.3
+  }
 }

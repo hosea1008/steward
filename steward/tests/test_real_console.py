@@ -143,8 +143,8 @@ def test_http_connect_live_frames_health_loss_and_disconnect(monkeypatch):
         wait_for(lambda: c.state()['runtime'] is not None)
         assert c.state()['runtime']['mode'] == 'fake'
         assert not c.state()['agent']['connected']
-        with pytest.raises(HttpError, match='尚未接入') as rejected:
-            call('POST', http.url+'/api/chat', {'message': 'navigate'})
+        with pytest.raises(HttpError, match='启用 Agent') as rejected:
+            call('POST', http.url+'/api/chat', {'text': 'navigate'})
         assert rejected.value.status == 409
         healthy.clear()
         wait_for(lambda: not any(camera['live'] for camera in c.state()['cameras']))
@@ -160,3 +160,116 @@ def test_http_connect_live_frames_health_loss_and_disconnect(monkeypatch):
         if c:
             c.close()
         source.stop()
+
+
+def test_console_routes_only_operator_messages_and_stops_agent_before_unload(monkeypatch):
+    calls = []
+    class Agent:
+        def state(self):
+            return {'connected': True, 'busy': False, 'messages': []}
+        def send(self, text):
+            calls.append(('send', text))
+            return {'accepted': True}
+        def stop(self):
+            calls.append(('stop',))
+            return {'active': None}
+        def close(self):
+            calls.append(('close',))
+        def set_context(self, text, previous):
+            calls.append(('context', text, previous))
+            return {'task_context': text}
+    value = config()
+    monkeypatch.setitem(service.BOOT_ADAPTERS, value['model'], lambda cfg, emit: [])
+    monkeypatch.setattr(Console, '_camera', lambda self, camera: self.cancel.wait())
+    monkeypatch.setattr(Console, '_health', lambda self, config: None)
+    c = Console({value['id']: value}, agent_factory=lambda cfg, emit: Agent())
+    http = make_server(c, 0, host='127.0.0.1').start()
+    try:
+        call('POST', http.url+'/api/connect', {'id': value['id']})
+        wait_for(lambda: c.state()['phase'] == 'connected')
+        c.emit('DEBUG', 'fixture', 'diagnostic only')
+        assert c.state()['agent']['messages'] == []
+        assert call('POST', http.url+'/api/chat', {'text': '只读任务'})['accepted']
+        assert call('POST', http.url+'/api/chat/stop', {})['active'] is None
+        generation = c.state()['generation']
+        with pytest.raises(HttpError, match='切换'):
+            call('POST', http.url+'/api/context', {'text': '旧页面', 'previous': '', 'generation': generation-1})
+        assert call('POST', http.url+'/api/context', {'text': '位置资料', 'previous': '', 'generation': generation}) == {'task_context': '位置资料'}
+        call('POST', http.url+'/api/disconnect', {})
+        assert calls == [('send', '只读任务'), ('stop',), ('context', '位置资料', ''), ('close',)]
+        with pytest.raises(HttpError):
+            call('POST', http.url+'/api/chat', {'text': '配置已断开'})
+    finally:
+        http.stop()
+        c.close()
+
+
+def test_task_context_persists_per_robot_and_rejects_busy_or_stale_edits(tmp_path):
+    from types import SimpleNamespace
+    from steward.ego.real.console.chat import RealChat
+    motion = SimpleNamespace(begin=lambda: None, stop=lambda: None)
+    cfg = {'id': 'fixture', 'name': 'Fixture robot'}
+    chat = RealChat(cfg, motion, tmp_path, tmp_path/'absent.env')
+    chat.set_context('物料资料', '')
+    assert RealChat(cfg, motion, tmp_path, tmp_path/'absent.env').context() == '物料资料'
+    assert RealChat({**cfg, 'id': 'another'}, motion, tmp_path, tmp_path/'absent.env').context() == ''
+    with pytest.raises(HttpError, match='其他页面'):
+        chat.set_context('覆盖内容', '')
+    chat.agents['robot'].busy = True
+    with pytest.raises(HttpError, match='执行期间'):
+        chat.set_context('', '物料资料')
+    chat.agents['robot'].busy = False
+    chat.set_context('', '物料资料')
+    assert RealChat(cfg, motion, tmp_path, tmp_path/'absent.env').context() == ''
+
+
+def test_failed_context_save_keeps_previous_context(tmp_path, monkeypatch):
+    from pathlib import Path
+    from types import SimpleNamespace
+    from steward.ego.real.console.chat import RealChat
+    chat = RealChat({'id': 'fixture', 'name': 'Fixture robot'}, SimpleNamespace(begin=lambda: None, stop=lambda: None),
+                    tmp_path, tmp_path/'absent.env')
+    chat.set_context('原内容', '')
+    def fail_replace(self, target):
+        raise OSError('fixture disk write failure')
+    monkeypatch.setattr(Path, 'replace', fail_replace)
+    with pytest.raises(OSError):
+        chat.set_context('新内容', '原内容')
+    assert chat.context() == chat.context_path.read_text() == '原内容'
+    assert not list(chat.context_path.parent.glob('.context-*'))
+
+
+def test_new_session_rejects_busy_turn_and_preserves_context(tmp_path):
+    from types import SimpleNamespace
+    from steward.ego.real.console.chat import RealChat
+    chat = RealChat({'id': 'fixture', 'name': 'Fixture robot'}, SimpleNamespace(begin=lambda: None, stop=lambda: None),
+                    tmp_path, tmp_path/'absent.env')
+    chat.set_context('保留的任务资料', '')
+    agent = chat.agents['robot']
+    agent.session_id = 'previous-session'
+    chat.post_note('robot', '旧对话')
+    agent.busy = True
+    with pytest.raises(HttpError, match='执行期间'):
+        chat.new_session()
+    assert agent.session_id == 'previous-session'
+    agent.busy = False
+    chat.new_session()
+    assert agent.session_id is None
+    assert [m['text'] for m in chat.state()['messages']] == ['已开启新会话，请输入任务']
+    assert chat.context() == chat.context_path.read_text() == '保留的任务资料'
+
+
+def test_real_tool_details_preserve_json_beyond_preview_length(tmp_path):
+    from types import SimpleNamespace
+    from steward.ego.real.console.chat import RealChat
+    chat = RealChat({'id': 'fixture', 'name': 'Fixture robot'}, SimpleNamespace(begin=lambda: None, stop=lambda: None),
+                    tmp_path, tmp_path/'absent.env')
+    agent = chat.agents['robot']
+    chat._ingest(agent, json.dumps({'type': 'tool_call', 'callId': 'c1', 'tool': 'ego_state', 'input': {}}), None)
+    result = {'state': 'failed', 'error': 'fixture', 'feedback': 'x' * 1600}
+    chat._ingest(agent, json.dumps({'type': 'tool_result', 'callId': 'c1', 'status': 'completed',
+                                   'result': json.dumps(result)}), None)
+    entry = chat.state()['messages'][-1]
+    assert json.loads(entry['text']) == result
+    assert entry['input'] == {}
+    assert entry['status'] == 'completed'

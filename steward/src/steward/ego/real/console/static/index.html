@@ -33,6 +33,11 @@
         <div id="devices" class="device-grid"></div>
         <details class="configuration"><summary data-i18n="configurationDetails"></summary><pre id="config-json"></pre></details>
       </section>
+      <details class="card tools-section" open>
+        <summary><span data-i18n="supportedTools"></span><span id="tool-count" class="pill">0</span></summary>
+        <p class="muted tools-hint" data-i18n="toolsHint"></p>
+        <div id="supported-tools" class="tool-list"></div>
+      </details>
       <section class="card log-card">
         <div class="section-title"><h2 data-i18n="debugLogs"></h2><span id="log-count" class="pill">0</span><span class="spacer"></span>
           <label class="sr-only" for="level" data-i18n="logLevel"></label>
@@ -44,18 +49,45 @@
       </section>
     </div>
     <section class="card chat">
-      <div class="section-title"><span class="dot orange"></span><h2 data-i18n="operator"></h2><span class="spacer"></span><span class="pill" data-i18n="robotOnly"></span></div>
-      <div class="agent-status"><span class="dot"></span><span data-i18n="agentPending"></span></div>
+      <div class="agent-tabs" role="tablist" data-label="agentPanels">
+        <button id="tab-conversation" type="button" role="tab" aria-selected="true" aria-controls="panel-conversation" data-i18n="operator"></button>
+        <button id="tab-system" type="button" role="tab" aria-selected="false" aria-controls="panel-system" tabindex="-1" data-i18n="systemPrompt"></button>
+        <button id="tab-context" type="button" role="tab" aria-selected="false" aria-controls="panel-context" tabindex="-1" data-i18n="taskContext"></button>
+      </div>
+      <div class="agent-status"><span class="dot"></span><span id="agent-status" data-i18n="agentPending"></span><span class="spacer"></span><button id="stop-agent" type="button" disabled data-i18n="stopAgent"></button><button id="new-session" type="button" disabled data-i18n="newSession"></button></div>
+      <div id="panel-conversation" class="agent-panel conversation-panel" role="tabpanel" aria-labelledby="tab-conversation">
       <div id="messages" class="messages" role="log" aria-label="Robot conversation">
         <div class="welcome"><div class="welcome-icon">S</div><h3 data-i18n="welcomeTitle"></h3><p data-i18n="welcomeBody"></p></div>
       </div>
-      <div class="notice" id="chat-hint" data-i18n="chatHint"></div>
+      <div class="notice" id="chat-hint" hidden></div>
       <form id="composer" class="composer">
         <label class="sr-only" for="message" data-i18n="message"></label>
         <textarea id="message" rows="3" data-placeholder="messagePlaceholder" aria-describedby="chat-hint"></textarea>
         <button id="send" type="submit" disabled data-i18n="send"></button>
       </form>
       <div class="composer-note" data-i18n="draftHint"></div>
+      </div>
+      <div id="panel-system" class="agent-panel text-panel" role="tabpanel" aria-labelledby="tab-system" tabindex="0" hidden>
+        <p class="notice" data-i18n="systemPromptHint"></p>
+        <h3 data-i18n="configuredSystemPrompt"></h3>
+        <pre id="system-prompt"></pre>
+        <details class="brief-details" open>
+          <summary data-i18n="operatorBrief"></summary>
+          <pre id="operator-brief"></pre>
+        </details>
+      </div>
+      <div id="panel-context" class="agent-panel text-panel" role="tabpanel" aria-labelledby="tab-context" tabindex="0" hidden>
+        <p class="notice" data-i18n="taskContextHint"></p>
+        <form id="context-form" class="context-form">
+          <label for="context-editor" data-i18n="contextEditor"></label>
+          <textarea id="context-editor" rows="10" maxlength="64000" disabled></textarea>
+          <div class="context-actions"><button id="context-save" type="submit" disabled data-i18n="contextSave"></button><button id="context-reload" type="button" disabled data-i18n="contextReload"></button></div>
+          <p id="context-status" class="muted" role="status"></p>
+          <p id="context-error" class="notice error" role="alert" hidden></p>
+        </form>
+        <details class="brief-details"><summary data-i18n="contextCurrent"></summary><pre id="task-context"></pre></details>
+        <div id="context-empty" class="panel-empty"><h3 data-i18n="contextEmpty"></h3><p data-i18n="contextEmptyHint"></p></div>
+      </div>
     </section>
   </div>
   <footer><span data-i18n="footer"></span><span id="updated"></span></footer>

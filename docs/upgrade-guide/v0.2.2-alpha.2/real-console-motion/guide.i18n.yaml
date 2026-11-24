@@ -1,0 +1,16 @@
+# Bilingual-pair consistency record for guide.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write docs/upgrade-guide/v0.2.2-alpha.2/real-console-motion/guide.md
+/:
+  en: 83e63ce158ebf9ac
+  zh: 7d78307ae6187128
+/real-console-motion-configuration:
+  en: d2504c5b7419e4d5
+  zh: 00aa48a66d988d16
+/real-console-motion-configuration/change:
+  en: 666fe7668dbbcfb1
+  zh: 5220aa2ec60b78c6
+/real-console-motion-configuration/migration:
+  en: 9b46292f284773a8
+  zh: 14f652e94e30d832
