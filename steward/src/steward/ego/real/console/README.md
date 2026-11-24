@@ -31,6 +31,7 @@ PYTHONPATH=steward/src steward/.venv/bin/python -m steward.ego.real.console --ke
 
 | 工具 | 参数 | 行为 |
 | --- | --- | --- |
+| `get_navigation_state` | `timeout_s`（必填，0.1–30 秒） | 只读获取底盘地图位置、朝向、定位有效性、两层导航状态、当前任务及进度 |
 | `navigate_to_pose` | `x`、`y`（地图米制坐标），`heading_deg`（相对地图 +X 的角度，−180 至 180），`map_name`，`timeout_s`，`position_tolerance_m`，`heading_tolerance_deg` | 单个地图目标位姿；固定线速度 0.1 m/s、角速度 0.1 rad/s，开启避障；不含物料坐标、固定路线或速度入参 |
 | `lift_move` | `action: "height"`、`height_mm`（整数 0–750）、`timeout_s`；或者 `action: "home"`、`timeout_s` | 固定 400 RPM；height 是绝对高度；home 真实向下运行至限位并归零，不能带 height_mm；不会自动 home |
 | `clear_motion_fault` | `fault_id`、`operator_confirmed_stopped: true`、`reason` | 现场检查后清除当前软件故障锁定；不发送设备指令，不归零、不重试 |
@@ -48,6 +49,8 @@ NAVIS 驱动同时检查 `/agx_smach_state` 的任务调度状态和 `/run_manag
 升降到达目标附近后先发送停止，在本次动作期限内等待连续两次零转速反馈，再核验实测高度误差小于 2 mm；等待期间不再发送目标位置。显式停止默认最多等待 2 秒停稳反馈，通信读取另受串口超时约束。停稳超时或高度不符仍报告失败，并在 `feedback` 中保留可取得的最后实测状态；停止确认与到位成功分别报告。
 
 “停止任务”、断开连接和进程正常退出会取消本控制台发起的动作，等待驱动结束后释放连接。模型请求断连或工具 HTTP 请求超时也会触发取消。停止反馈超时会保留故障，不能显示已安全停止。网页按钮是软件取消，不是硬件急停；宿主断电、网络完全失联时无法保证远程底盘收到取消，现场硬件安全设施仍须有效。
+
+`get_navigation_state` 经 `ctx.ego.navigation.readState` 调用独立只读连接，参考 NAVIS 的 `get_position` / `get_nav_status` 订阅 `/agx_smach_state`，同时读取 `/run_management/global_status`。`pose.x/y` 单位为米，`pose.heading_deg` 相对地图 +X、单位为度；`pose_valid=false` 时不能把坐标作为可靠定位。`scheduler_status` 和 `navigation_status.status` 分别保留两个状态层，`task.name` 使用列表任务的 `btName`，`progress_percent` 为设备报告的进度。`received_at_unix_s` 为各话题在本机的接收时间，不是传感器采集时间，两路数据不保证同一时刻。连接和认证另有短超时，`timeout_s` 限制等待反馈的时间；数据缺失或异常明确报失败，不返回伪造的零坐标。软件故障、禁用运动及运动进行中均可读取；读取失败不改变运动故障和最近动作结果，取消读取只释放读取连接。可在操作员对话中输入“读取底盘当前位置、朝向和导航状态，不要移动”。
 
 ## 配置和代码位置
 

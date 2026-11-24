@@ -21,6 +21,14 @@ export function apply(ctx: Context): void {
   const ego = ctx.ego
   const motion = ego.motion
   if (!motion) throw new Error('motion tools require a ctx.ego provider with parameterized motion support')
+  const navigation = ego.navigation
+  if (!navigation) throw new Error('real console tools require a ctx.ego provider with navigation telemetry support')
+  ctx.effect(() => ctx.tools.register(defineTool({
+    name: 'get_navigation_state',
+    description: 'Read current chassis navigation feedback from the device, unlike cached ego_state. Returns absolute map x/y in meters, heading_deg from map +X, map name, localization validity, scheduler and navigation status, task identity and progress. Read-only: no movement, stop, reset or fault clearance. Available with a software fault or motion disabled. Require state=succeeded and pose_valid=true before using coordinates; reading successfully does not prove physical rest or navigation success. Receive timestamps are host times; the two topics are not an atomic sensor snapshot.',
+    parameters: { timeout_s: { type: 'number', required: true, description: 'Wait for both feedback topics, 0.1–30 seconds; authentication and connection have separate bounded timeouts.' } },
+    output, execute: async (args, exec) => json(await navigation.readState(args, exec.signal)),
+  })))
   ctx.effect(() => ctx.tools.register(defineTool({
     name: 'ego_state', description: 'Read cached real-motion state, faults, configured map and fixed speed limits. Does not contact actuators or measure the current pose.',
     parameters: {}, output, execute: async (_, exec) => json(await ego.summary(exec.signal)),

@@ -160,6 +160,137 @@ def pose(status, x=1.2):
     return dict(smachStatus=status, locationLost=False, x=x, y=-.4, rotation=90)
 
 
+def telemetry_driver(pose_changes=None):
+    import json
+    messages = deque([
+        {'op': 'publish', 'topic': STATUS_TOPIC,
+         'msg': {'status': 2, 'text': 'task is canceled', 'map_name': 'fixture-map'}},
+        {'op': 'publish', 'topic': POSE_TOPIC,
+         'msg': {**pose(1), 'mapName': 'fixture-map', 'taskName': 'list_task',
+                 'btName': 'fixture-task', 'percentage': 35, **(pose_changes or {})}},
+    ])
+    class Socket:
+        def __init__(self):
+            self.sent = []
+        def send(self, message):
+            self.sent.append(json.loads(message))
+        def settimeout(self, timeout):
+            pass
+        def recv(self):
+            return json.dumps(messages.popleft())
+    nav = Navigation({}, lambda: False)
+    nav.ws = Socket()
+    nav.connect = lambda: None
+    return nav
+
+
+@pytest.mark.parametrize('lost', [False, True])
+def test_navigation_observation_reads_device_pose_without_actuation(lost):
+    nav = telemetry_driver({'locationLost': lost})
+    result = nav.read_state(1)
+    assert result['pose'] == {'x': 1.2, 'y': -.4, 'heading_deg': 90}
+    assert result['pose_valid'] is not lost
+    assert result['scheduler_status'] == 1
+    assert result['navigation_status']['status'] == 2
+    assert result['task'] == {'type': 'list_task', 'name': 'fixture-task'}
+    assert all(t > 0 for t in result['received_at_unix_s'].values())
+    assert {m['op'] for m in nav.ws.sent} <= {'subscribe', 'ping'}
+    assert not nav.dispatched
+
+
+@pytest.mark.parametrize('changes', [{'x': None}, {'rotation': float('nan')}, {'locationLost': 'false'}])
+def test_navigation_observation_rejects_incomplete_or_invalid_pose(changes):
+    nav = telemetry_driver(changes)
+    with pytest.raises(RuntimeError, match='数值|字段无效'):
+        nav.read_state(1)
+
+
+def test_navigation_observation_timeout_preserves_partial_feedback():
+    nav = telemetry_driver()
+    nav.feedback[POSE_TOPIC] = pose(1)
+    def timeout(*args, **kwargs):
+        raise TimeoutError()
+    nav._wait = timeout
+    with pytest.raises(RuntimeError, match='未收到完整反馈') as error:
+        nav.read_state(.1)
+    assert error.value.feedback[POSE_TOPIC] == pose(1)
+
+
+@pytest.mark.parametrize('fail', [False, True])
+def test_read_only_navigation_works_with_fault_and_actuation_disabled(fail):
+    calls = []
+    class Nav:
+        def __init__(self, cfg, cancelled):
+            pass
+        def read_state(self, timeout):
+            calls.append(('read', timeout))
+            if fail:
+                raise TimeoutError('fixture telemetry unavailable')
+            return {'state': 'succeeded', 'pose_valid': False}
+        def close(self):
+            calls.append(('close',))
+        def stop(self):
+            pytest.fail('reading must not send stop')
+    m = Motion(config(), lambda *args: None, enabled=False, navigation_factory=Nav)
+    try:
+        m._latch_fault({'error': 'existing motion fault'})
+        m.last_result = {'state': 'failed', 'error': 'preserve me'}
+        before = m.state()
+        result = call('POST', m.http.url+'/navigation-state', {'token': m.token, 'arguments': {'timeout_s': 1}})
+        assert result['state'] == ('failed' if fail else 'succeeded')
+        assert m.state() == before
+        assert calls == [('read', 1), ('close',)]
+        assert not m.readers
+    finally:
+        m.close()
+
+
+@pytest.mark.parametrize('args', [{}, {'timeout_s': True}, {'timeout_s': 31}, {'timeout_s': 1, 'x': 1}])
+def test_navigation_observation_validates_arguments_before_transport(args):
+    m = Motion(config(), lambda *args: None, navigation_factory=lambda *args: pytest.fail('invalid read opened transport'))
+    try:
+        with pytest.raises(HttpError):
+            m.read_navigation_state(args)
+    finally:
+        m.close()
+
+
+@pytest.mark.parametrize('peer_disconnect', [False, True])
+def test_navigation_observation_closes_on_disconnect_without_stop_or_fault(peer_disconnect):
+    entered, gone, closed = threading.Event(), threading.Event(), threading.Event()
+    class Nav:
+        def __init__(self, cfg, cancelled):
+            self.cancelled = cancelled
+        def read_state(self, timeout):
+            import time
+            entered.set()
+            deadline = time.monotonic() + 3
+            while not self.cancelled():
+                assert time.monotonic() < deadline
+                gone.wait(.01)
+            raise InterruptedError('read cancelled')
+        def close(self):
+            closed.set()
+        def stop(self):
+            pytest.fail('read cancellation must not stop the robot')
+    m = Motion(config(), lambda *args: None, navigation_factory=Nav)
+    worker = threading.Thread(target=lambda: m.read_navigation_state({'timeout_s': 5}, gone.is_set))
+    try:
+        worker.start()
+        assert entered.wait(2)
+        if peer_disconnect:
+            gone.set()
+        else:
+            m.close()
+        worker.join(3)
+        assert not worker.is_alive()
+        assert closed.is_set() and not m.readers and m.fault is None
+    finally:
+        gone.set()
+        worker.join(3)
+        m.close()
+
+
 def test_navigation_requires_new_execution_and_checks_measured_pose():
     nav = NavFixture([pose(0), pose(3), pose(1), pose(3)])
     assert nav.navigate(NAV)['state'] == 'succeeded'

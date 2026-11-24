@@ -66,12 +66,15 @@ class Motion:
         self.fault = None
         self.fault_id = None
         self.last_fault_clear = None
+        self.readers = {}
         self.http = JsonServer({
             ('POST', '/state'): lambda q, b: self._request(b, lambda: self.state()),
             ('POST', '/execute'): CancellableHandler(lambda q, b, gone: self._request(
                 b, lambda: self.execute(b.get('tool'), b.get('arguments'), gone))),
             ('POST', '/stop'): lambda q, b: self._request(b, self.stop),
             ('POST', '/clear-fault'): lambda q, b: self._request(b, lambda: self.clear_fault(b.get('arguments'))),
+            ('POST', '/navigation-state'): CancellableHandler(lambda q, b, gone: self._request(
+                b, lambda: self.read_navigation_state(b.get('arguments'), gone))),
         }, name='real-motion').start()
 
     def _request(self, body, action):
@@ -88,12 +91,51 @@ class Motion:
                     'map_name': self.config['navigation']['map'],
                     'limits': {'linear_m_s': LINEAR_SPEED_M_S, 'angular_rad_s': ANGULAR_SPEED_RAD_S,
                                'lift_rpm': LiftController.MOTOR_RPM, 'lift_height_mm': [0, 750]},
-                    'tools': ['navigate_to_pose', 'lift_move', 'clear_motion_fault'],
+                    'tools': ['navigate_to_pose', 'lift_move', 'clear_motion_fault', 'get_navigation_state'],
                     'lift_home': 'explicit; encoder origin must be established after each motor power cycle'}
 
     def _latch_fault(self, fault):
         """Assign a new fault identity under the runtime lock, rejecting stale recovery requests."""
         self.fault, self.fault_id = fault, secrets.token_urlsafe(12)
+
+    def read_navigation_state(self, args, peer_gone=lambda: False):
+        """Own one cancellable read transport, independently of motion and its fault latch.
+
+        Reads work with actuation disabled or a retained fault. Failure never stops
+        an actuator, clears/latches a motion fault, or replaces its last result.
+        """
+        if (not isinstance(args, dict) or args.keys() != {'timeout_s'}
+                or type(args.get('timeout_s')) not in (int, float)
+                or not math.isfinite(args['timeout_s']) or not .1 <= args['timeout_s'] <= 30):
+            raise HttpError(400, '导航状态读取只接受 timeout_s，范围 0.1–30 秒')
+        cancelled, done = threading.Event(), threading.Event()
+        with self.lock:
+            if self.closed or self.readers:
+                raise HttpError(409, '运行时正在关闭或已有导航状态读取')
+            self.readers[cancelled] = done
+        driver = None
+        try:
+            is_cancelled = lambda: cancelled.is_set() or peer_gone()
+            if is_cancelled():
+                raise InterruptedError('导航状态读取已取消')
+            driver = self.navigation_factory(self.config['navigation'], is_cancelled)
+            result = driver.read_state(args['timeout_s'])
+        except Exception as exc:
+            result = {'state': 'failed', 'error': str(exc)}
+            if isinstance(exc, NavigationError):
+                result['feedback'] = exc.feedback
+        finally:
+            try:
+                if driver is not None:
+                    driver.close()
+            except Exception as exc:
+                result = {'state': 'failed', 'error': '导航读取连接关闭失败: ' + str(exc)}
+            finally:
+                with self.lock:
+                    del self.readers[cancelled]
+                    done.set()
+        self.emit('INFO' if result['state'] == 'succeeded' else 'ERROR', 'navigation', '读取底盘导航状态', result)
+        return result
 
     def clear_fault(self, args):
         """Clear one inspected software fault without device IO, replay or cancellation reset.
@@ -198,6 +240,12 @@ class Motion:
         with self.lock:
             self.cancel.set()
             self.accepting = False
+            readers = list(self.readers.items())
+            for cancelled, _ in readers:
+                cancelled.set()
+        for _, done in readers:
+            if not done.wait(10):
+                raise HttpError(504, '导航只读连接尚未关闭')
         if not self.done.wait(20):
             with self.lock:
                 self._latch_fault({'error': '停止等待超时，请现场检查或使用急停', 'physical_result': 'unknown'})

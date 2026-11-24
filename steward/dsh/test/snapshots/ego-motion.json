@@ -46,6 +46,23 @@
       "strict": false
     },
     {
+      "name": "get_navigation_state",
+      "description": "Read current chassis navigation feedback from the device, unlike cached ego_state. Returns absolute map x/y in meters, heading_deg from map +X, map name, localization validity, scheduler and navigation status, task identity and progress. Read-only: no movement, stop, reset or fault clearance. Available with a software fault or motion disabled. Require state=succeeded and pose_valid=true before using coordinates; reading successfully does not prove physical rest or navigation success. Receive timestamps are host times; the two topics are not an atomic sensor snapshot.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "timeout_s": {
+            "type": "number",
+            "description": "Wait for both feedback topics, 0.1–30 seconds; authentication and connection have separate bounded timeouts."
+          }
+        },
+        "required": [
+          "timeout_s"
+        ]
+      },
+      "strict": false
+    },
+    {
       "name": "lift_move",
       "description": "Move the real lift. action=height sets an absolute integer height in mm (0–750); action=home moves DOWN to the physical limit and establishes zero, and must omit height_mm. Homing is explicit, never automatic. After motor power loss the operator must establish the origin with home before height moves. Fixed 400 RPM. Blocks; require state=succeeded before dependent work.",
       "parameters": {
@@ -128,6 +145,12 @@
       "path": "/state"
     },
     {
+      "path": "/navigation-state",
+      "arguments": {
+        "timeout_s": 5
+      }
+    },
+    {
       "path": "/clear-fault",
       "arguments": {
         "fault_id": "fixture-fault",
@@ -165,6 +188,13 @@
       "status": "completed"
     },
     {
+      "tool": "get_navigation_state",
+      "input": {
+        "timeout_s": 5
+      },
+      "status": "completed"
+    },
+    {
       "tool": "clear_motion_fault",
       "input": {
         "fault_id": "fixture-fault",
@@ -196,6 +226,23 @@
       "status": "completed"
     }
   ],
+  "navigationResult": {
+    "state": "succeeded",
+    "pose_valid": true,
+    "location_lost": false,
+    "pose": {
+      "x": 1.2,
+      "y": -0.4,
+      "heading_deg": 90
+    },
+    "map_name": "fixture-map",
+    "scheduler_status": 3,
+    "navigation_status": {
+      "status": 3,
+      "text": "task finish",
+      "map_name": "fixture-map"
+    }
+  },
   "answers": [
     "模拟设备导航与升降完成，未操作真机。",
     "当前任务上下文已清空。"

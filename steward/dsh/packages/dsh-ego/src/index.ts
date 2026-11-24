@@ -59,6 +59,17 @@ export interface ClearMotionFaultRequest {
   reason: string
 }
 
+/** Read-only navigation telemetry; independent of permission to move the robot. */
+export interface EgoNavigation {
+  /** Subscribe to current controller pose and navigation status without sending motion commands.
+   * @param request - feedback wait timeout in seconds, 0.1–30; connection has its own bounded timeout.
+   * @param signal - cancel this observation and close its transport without stopping the robot.
+   * @returns observation outcome, map pose in metres/degrees, localization validity, task and both status layers;
+   * receive times are host timestamps, not sensor acquisition times or an atomic snapshot.
+   */
+  readState(request: { timeout_s: number }, signal?: AbortSignal): Promise<JsonObject>
+}
+
 /** Optional parameterized motion capability; it does not imply ESim prediction support. */
 export interface EgoMotion {
   /** Move to a map pose and wait for execution feedback.
@@ -319,6 +330,8 @@ export class EgoError extends Error {
 export abstract class EgoService extends Service {
   /** Present only when the provider supports parameterized motion; consumers must check before registration. */
   readonly motion?: EgoMotion
+  /** Present only when the provider supports read-only navigation telemetry. */
+  readonly navigation?: EgoNavigation
 
   constructor(ctx: Context) {
     super(ctx, 'ego')

@@ -90,7 +90,7 @@ function renderTools(agent) {
   container.dataset.tools = signature;
   $('tool-count').textContent = names.length;
   const labels = {navigate_to_pose: ['toolNavigate', 'toolNavigateDetail'], lift_move: ['toolLift', 'toolLiftDetail'],
-    clear_motion_fault: ['toolClearFault', 'toolClearFaultDetail']};
+    clear_motion_fault: ['toolClearFault', 'toolClearFaultDetail'], get_navigation_state: ['toolNavigationState', 'toolNavigationStateDetail']};
   container.replaceChildren(...names.map(name => {
     const label = labels[name], row = el('article', 'device tool-card'), heading = el('div', 'device-head', label ? t(label[0]) : name);
     heading.append(el('span', 'pill good', t('toolRegistered')));

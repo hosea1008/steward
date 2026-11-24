@@ -11,7 +11,10 @@ import { promisify } from 'node:util'
 import { launchProfile } from './profile-test.mjs'
 
 const root = resolve(import.meta.dirname, '../..')
-const toolNames = ['body_stop', 'clear_motion_fault', 'ego_state', 'lift_move', 'navigate_to_pose']
+const toolNames = ['body_stop', 'clear_motion_fault', 'ego_state', 'get_navigation_state', 'lift_move', 'navigate_to_pose']
+const navigationFeedback = { state: 'succeeded', pose_valid: true, location_lost: false,
+  pose: { x: 1.2, y: -.4, heading_deg: 90 }, map_name: 'fixture-map',
+  scheduler_status: 3, navigation_status: { status: 3, text: 'task finish', map_name: 'fixture-map' } }
 test('console native calls carry tool descriptions and the saved context on every turn', { timeout: 90000 }, async t => {
   const home = await mkdtemp(join(tmpdir(), 'ego-motion-'))
   t.after(() => rm(home, { recursive: true, force: true }))
@@ -27,7 +30,8 @@ test('console native calls carry tool descriptions and the saved context on ever
       assert.equal(token, 'fixture-token')
       requests.push({ path: req.url, ...body })
       res.writeHead(200, { 'Content-Type': 'application/json' })
-      res.end(JSON.stringify(req.url === '/state' ? { mode: 'fake', map_name: 'fixture-map', fault_id: 'fixture-fault', fault: {error: 'fixture failure'} } : { state: 'succeeded', mode: 'fake' }))
+      res.end(JSON.stringify(req.url === '/state' ? { mode: 'fake', map_name: 'fixture-map', fault_id: 'fixture-fault', fault: {error: 'fixture failure'} }
+        : req.url === '/navigation-state' ? navigationFeedback : { state: 'succeeded', mode: 'fake' }))
     } catch (error) { failure = error; res.writeHead(500); res.end('{}') }
   }).listen(0, '127.0.0.1')
   await once(runtime, 'listening')
@@ -40,12 +44,12 @@ test('console native calls carry tool descriptions and the saved context on ever
       assert.deepEqual(request.tools.map(t => t.function.name).sort(), toolNames)
       const step = modelRequests.length
       modelRequests.push(request)
-      assert.ok(step <= 6)
+      assert.ok(step <= 7)
       const currentUser = request.messages.filter(m => m.role === 'user' && typeof m.content === 'string'
         && m.content.includes('当前任务上下文')).at(-1)?.content
       assert.ok(currentUser)
-      assert.match(currentUser, step < 5 ? /模拟物料位置由操作员提供/ : step === 5 ? /"task_context": ""/ : /新会话保留的任务资料/)
-      if (step === 6) {
+      assert.match(currentUser, step < 6 ? /模拟物料位置由操作员提供/ : step === 6 ? /"task_context": ""/ : /新会话保留的任务资料/)
+      if (step === 7) {
         assert.doesNotMatch(JSON.stringify(request.messages), /在模拟设备依次调用|只读确认当前上下文已清空/)
         assert.ok(!request.messages.some(m => m.role === 'tool'))
       }
@@ -53,16 +57,22 @@ test('console native calls carry tool descriptions and the saved context on ever
       assert.doesNotMatch(system, /run_code|编写可复用/)
       const calls = [
         { name: 'ego_state', arguments: {} },
+        { name: 'get_navigation_state', arguments: {timeout_s: 5} },
         { name: 'clear_motion_fault', arguments: {fault_id: 'fixture-fault', operator_confirmed_stopped: true, reason: '操作员已确认停稳并检查现场'} },
         { name: 'navigate_to_pose', arguments: {x: 1.2, y: -0.4, heading_deg: 90, map_name: 'fixture-map', timeout_s: 20, position_tolerance_m: 0.05, heading_tolerance_deg: 2} },
         { name: 'lift_move', arguments: {action: 'height', height_mm: 220, timeout_s: 15} },
       ]
       const call = calls[step]
-      if (step > 1 && step < 5) assert.match(JSON.stringify(request.messages), /succeeded/)
+      if (step > 1 && step < 6) assert.match(JSON.stringify(request.messages), /succeeded/)
+      if (step === 2) {
+        const feedback = request.messages.filter(m => m.role === 'tool').at(-1)
+        assert.match(JSON.stringify(feedback), /pose_valid/)
+        assert.match(JSON.stringify(feedback), /heading_deg/)
+      }
       res.writeHead(200, { 'Content-Type': 'text/event-stream' })
       const delta = call ? { role: 'assistant', tool_calls: [{ index: 0, id: 'motion-' + step, type: 'function',
         function: { name: call.name, arguments: JSON.stringify(call.arguments) } }] }
-        : { role: 'assistant', content: step === 4 ? '模拟设备导航与升降完成，未操作真机。' : step === 5 ? '当前任务上下文已清空。' : '新会话保留任务资料，未携带旧对话。' }
+        : { role: 'assistant', content: step === 5 ? '模拟设备导航与升降完成，未操作真机。' : step === 6 ? '当前任务上下文已清空。' : '新会话保留任务资料，未携带旧对话。' }
       for (const [part, finish] of [[delta, null], [{}, call ? 'tool_calls' : 'stop']]) {
         res.write('data: ' + JSON.stringify({ id: 'reply', object: 'chat.completion.chunk', model: 'fixture',
           choices: [{ index: 0, delta: part, finish_reason: finish }] }) + '\n\n')
@@ -80,16 +90,17 @@ test('console native calls carry tool descriptions and the saved context on ever
     'http://127.0.0.1:' + runtime.address().port, 'http://127.0.0.1:' + gateway.address().port,
   ], { env: { ...env, PYTHONPATH: join(root, 'src') }, timeout: 75000 })
   if (failure) throw failure
-  assert.equal(modelRequests.length, 7)
-  assert.deepEqual(requests.map(r => r.tool || r.path), ['/state', '/clear-fault', 'navigate_to_pose', 'lift_move'])
+  assert.equal(modelRequests.length, 8)
+  assert.deepEqual(requests.map(r => r.tool || r.path), ['/state', '/navigation-state', '/clear-fault', 'navigate_to_pose', 'lift_move'])
   const transcript = JSON.parse(stdout)
   assert.equal(transcript.first.agents.robot.sessionId, transcript.second.agents.robot.sessionId)
   assert.notEqual(transcript.second.agents.robot.sessionId, transcript.third.agents.robot.sessionId)
   const snapshot = { toolDefinitions: modelRequests[0].tools.map(t => t.function), requests,
     toolCalls: transcript.first.messages.filter(e => e.role === 'tool').map(e => ({ tool: e.tool, input: e.input, status: e.status })),
+    navigationResult: JSON.parse(transcript.first.messages.find(e => e.tool === 'get_navigation_state').text),
     answers: transcript.second.messages.filter(e => e.role === 'assistant').map(e => e.text),
     newSessionMessages: transcript.third.messages.map(e => ({role: e.role, text: e.text})),
-    contextCleared: modelRequests[5].messages.filter(m => m.role === 'user' && typeof m.content === 'string'
+    contextCleared: modelRequests[6].messages.filter(m => m.role === 'user' && typeof m.content === 'string'
       && m.content.includes('当前任务上下文')).at(-1).content }
   const path = join(import.meta.dirname, 'snapshots/ego-motion.json')
   if (process.env.STEWARD_RECORD_MOTION === '1') await writeFile(path, JSON.stringify(snapshot, null, 2) + '\n')

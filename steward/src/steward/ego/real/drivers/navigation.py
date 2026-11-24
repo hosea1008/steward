@@ -42,6 +42,7 @@ class Navigation:
         self.task = None
         self.subscriptions = set()
         self.feedback = {}
+        self.feedback_received_at = {}
 
     def _http(self, method, path, body=None):
         headers = {'Content-Type': 'application/json'}
@@ -81,6 +82,7 @@ class Navigation:
                 continue
             if message.get('op') == 'publish' and message.get('topic') in (POSE_TOPIC, STATUS_TOPIC):
                 self.feedback[message['topic']] = message.get('msg', {})
+                self.feedback_received_at[message['topic']] = time.time()
             if predicate(message):
                 return message
         raise TimeoutError('导航反馈超时')
@@ -127,6 +129,42 @@ class Navigation:
             'username': self.config['username'], 'password': password})['data']
         self.ws = create_connection(self.config['websocket_url'], timeout=2, http_no_proxy=['*'])
         self._ping()
+
+    def read_state(self, timeout_s):
+        """Read both topics on a new connection; timestamps denote receipt, not sensor freshness.
+
+        Like NAVIS get_position/get_nav_status, pose comes from agx_smach_state.
+        Missing or malformed telemetry is an error, never a fabricated zero pose.
+        No navigation configuration, goal, cancellation or device reset is sent.
+        """
+        self.connect()
+        for topic in (POSE_TOPIC, STATUS_TOPIC):
+            self._subscribe(topic)
+        try:
+            self._wait(lambda m: all(topic in self.feedback for topic in (POSE_TOPIC, STATUS_TOPIC)), timeout_s)
+        except TimeoutError:
+            self._fail('导航状态读取超时，未收到完整反馈')
+        pose, status = self.feedback[POSE_TOPIC], self.feedback[STATUS_TOPIC]
+        if not isinstance(pose, dict) or not isinstance(status, dict):
+            self._fail('导航状态反馈格式无效')
+        for key in ('x', 'y', 'rotation', 'percentage'):
+            value = pose.get(key)
+            if type(value) not in (float, int) or not math.isfinite(value):
+                self._fail('导航状态缺少有效数值: ' + key)
+        if (type(pose.get('locationLost')) is not bool or type(pose.get('smachStatus')) is not int
+                or type(status.get('status')) is not int
+                or any(not isinstance(pose.get(k), str) for k in ('mapName', 'taskName', 'btName'))
+                or not isinstance(status.get('map_name'), str) or not isinstance(status.get('text'), str)):
+            self._fail('导航定位、地图或任务状态字段无效')
+        return {'state': 'succeeded', 'source': 'navis',
+                'pose': {'x': pose['x'], 'y': pose['y'], 'heading_deg': pose['rotation']},
+                'map_name': pose['mapName'], 'location_lost': pose['locationLost'],
+                'pose_valid': not pose['locationLost'] and bool(pose['mapName']),
+                'scheduler_status': pose['smachStatus'], 'navigation_status': status,
+                'task': {'type': pose['taskName'], 'name': self._task_name(pose)},
+                'progress_percent': pose['percentage'],
+                'received_at_unix_s': {'pose': self.feedback_received_at[POSE_TOPIC],
+                                       'navigation_status': self.feedback_received_at[STATUS_TOPIC]}}
 
     def navigate(self, args):
         """Dispatch once and verify terminal state and measured pose; never retry a goal."""
