@@ -32,11 +32,11 @@ PYTHONPATH=steward/src steward/.venv/bin/python -m steward.ego.real.console --ke
 | 工具 | 参数 | 行为 |
 | --- | --- | --- |
 | `get_navigation_state` | `timeout_s`（必填，0.1–30 秒） | 只读获取底盘地图位置、朝向、定位有效性、两层导航状态、当前任务及进度 |
-| `navigate_to_pose` | `x`、`y`（地图米制坐标），`heading_deg`（相对地图 +X 的角度，−180 至 180），`map_name`，`timeout_s`，`position_tolerance_m`，`heading_tolerance_deg` | 单个地图目标位姿；固定线速度 0.1 m/s、角速度 0.1 rad/s，开启避障；不含物料坐标、固定路线或速度入参 |
+| `navigate_to_pose` | `x`、`y`（地图米制坐标），`heading_deg`（相对地图 +X 的角度，−180 至 180），`map_name`，`timeout_s`，`position_tolerance_m`，`heading_tolerance_deg` | 单个地图目标位姿，开启避障；可选 `linear_speed_m_s`（0.1–0.5 m/s）和 `angular_speed_rad_s`（0.1–0.4 rad/s），均默认 0.2；不含物料坐标或固定路线 |
 | `move_for_duration` | `direction`、`duration_s`；可选 `speed` | 底盘按自身坐标系定时移动；默认速度 0.2，上限 0.5，到时发送零速度 |
 | `lift_move` | `action: "height"`、`height_mm`（整数 0–750）、`timeout_s`；或者 `action: "home"`、`timeout_s` | 固定 400 RPM；height 是绝对高度；home 真实向下运行至限位并归零，不能带 height_mm；不会自动 home |
 | `wam_operate` | `prompt`、`max_chunks`、`timeout_s`，其他通用参数可选 | 执行 WAM 双臂动作，不自动归零；详见下方部署说明 |
-| `arms_zero` | `timeout_s`、`open_grippers` | 双臂关节归零；是否张开夹爪必须明确传入 |
+| `arms_zero` | `timeout_s`、`open_grippers` | 双臂关节归零；`open_grippers` 可省略，默认 true 张开夹爪，不重复询问；false 保留夹爪目标 |
 | `clear_motion_fault` | `fault_id`、`operator_confirmed_stopped: true`、`reason` | 现场检查后清除当前软件故障锁定；不发送设备指令，不归零、不重试 |
 | `ego_state` | 无 | 读取配置、限速、当前动作及最近结果的缓存；不测量实时位姿或升降零点 |
 | `body_stop` | 无 | 取消本轮动作、等待停止反馈，本轮不再接受运动 |
@@ -90,7 +90,7 @@ Python 测试使用模拟驱动，DSH 录制测试使用独立 HTTP 模型与设
 
 ## Cosmos WAM 与双臂归零部署
 
-`wam_operate` 必填 `prompt`、`max_chunks`（1–1000）和 `timeout_s`（0.1–600 秒）。工具还暴露关节控制模式、控制周期、模型频率校验、预期 execute_steps、平滑参数、夹爪比例和预测视频开关；定义及范围见模型工具描述。当前适配器支持 `movej` / `movejs`，机械臂速度固定 25%；不开放 CPV 或 EEF 模式。`arms_zero` 必填 `timeout_s` 和 `open_grippers`，固定 10% 速度；true 会完全张开双夹爪并释放持物，false 不改变夹爪目标。
+`wam_operate` 必填 `prompt`、`max_chunks`（1–1000）和 `timeout_s`（0.1–600 秒）。工具还暴露关节控制模式、控制周期、模型频率校验、预期 execute_steps、平滑参数、夹爪比例和预测视频开关；定义及范围见模型工具描述。当前适配器支持 `movej` / `movejs`，机械臂速度固定 25%；不开放 CPV 或 EEF 模式。`arms_zero` 必填 `timeout_s`，`open_grippers` 可选、默认 true，固定 10% 速度；true 会完全张开双夹爪并释放持物，false 不改变夹爪目标。
 
 机器人 JSON 的 `wam` 配置保存 `adapter: cosmos-piper-v2`、`host`、`port`、`python`、`cosmos_repo`、`piper_client_dir`、`python_paths`、`environment`、`log_dir` 及 `camera_width/height/fps`。机械臂 CAN 和相机 ROS topic 复用 `arms` / `cameras`。使用自定义旧配置时，从[默认配置](configs/agilex-cobot-magic.json)补充 `wam`，核对本机路径与端口后重启；缺少配置会在启动时明确报错。
 
@@ -100,7 +100,7 @@ Python 测试使用模拟驱动，DSH 录制测试使用独立 HTTP 模型与设
 
 ## 按方向、速度、时间移动底盘
 
-`move_for_duration` 支持 `forward`（前进）、`backward`（后退）、`turn_left`（左转）、`turn_right`（右转）、`shift_left` / `shift_right`（左右横移，需底盘硬件支持）。方向相对底盘自身，不是地图坐标轴。`speed` 为正数，省略时使用 **0.2**，硬上限 **0.5**；平移单位 m/s，转向单位 rad/s，超过上限直接拒绝。`duration_s` 范围 0.1–60 秒，从心跳握手成功后开始计时。例：`{"direction":"backward","speed":0.2,"duration_s":2}`；省略 speed 仍使用 0.2。现有 `navigate_to_pose` 的 0.1 m/s、0.1 rad/s 限速保持不变。
+`move_for_duration` 支持 `forward`（前进）、`backward`（后退）、`turn_left`（左转）、`turn_right`（右转）、`shift_left` / `shift_right`（左右横移，需底盘硬件支持）。方向相对底盘自身，不是地图坐标轴。`speed` 为正数，省略时使用 **0.2**，硬上限 **0.5**；平移单位 m/s，转向单位 rad/s，超过上限直接拒绝。`duration_s` 范围 0.1–60 秒，从心跳握手成功后开始计时。例：`{"direction":"backward","speed":0.2,"duration_s":2}`；省略 speed 仍使用 0.2。坐标导航 `navigate_to_pose` 使用独立的速度参数：默认平移 0.2 m/s、旋转 0.2 rad/s，硬上限分别为 0.5 m/s、0.4 rad/s。
 
 操作员明确发出的移动指令视为已观察通道和机械臂姿态并授权执行，不例行二次确认；已知存在外部导航任务或控制器冲突时仍应停止并报告。工具通过 `/run_management/virtual_joy` 以 10 Hz 发送速度，保持心跳；它不规划路径、不校验地图目标，也不能承诺导航避障或精确位移。时间到或取消后发送零速度；取消、连接断开、心跳丢失和停止发送失败均保留故障，不自动重试。连接失败且尚未发送运动时不额外发送移动或停止指令。
 

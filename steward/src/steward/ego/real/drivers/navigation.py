@@ -13,9 +13,11 @@ import uuid
 from urllib.parse import urlencode
 from urllib.request import ProxyHandler, Request, build_opener
 
-# Safety limits cannot be overridden by tool arguments or deployment settings.
-LINEAR_SPEED_M_S = 0.1
-ANGULAR_SPEED_RAD_S = 0.1
+# Defaults are overridable within these fixed caps; deployment cannot raise the caps.
+LINEAR_SPEED_M_S = 0.2
+ANGULAR_SPEED_RAD_S = 0.2
+MAX_LINEAR_SPEED_M_S = 0.5
+MAX_ANGULAR_SPEED_RAD_S = 0.4
 POSE_TOPIC = '/agx_smach_state'
 STATUS_TOPIC = '/run_management/global_status'
 
@@ -167,7 +169,7 @@ class Navigation:
                                        'navigation_status': self.feedback_received_at[STATUS_TOPIC]}}
 
     def navigate(self, args):
-        """Dispatch once and verify terminal state and measured pose; never retry a goal."""
+        """Dispatch validated, fully resolved arguments once; verify terminal state and measured pose."""
         self.connect()
         state = self._topic(POSE_TOPIC)
         status = self._topic(STATUS_TOPIC)
@@ -179,15 +181,15 @@ class Navigation:
         if nav.get('state') is not True or nav.get('name') != args['map_name']:
             raise RuntimeError('导航地图未就绪或不匹配；请在导航系统加载所选地图')
         self._service('/run_management/set_navi_params', {'data': [
-            {'name': 'navis_ctrl_max_vel_x', 'data': str(LINEAR_SPEED_M_S)},
-            {'name': 'navis_ctrl_max_vel_theta', 'data': str(ANGULAR_SPEED_RAD_S)},
+            {'name': 'navis_ctrl_max_vel_x', 'data': str(args['linear_speed_m_s'])},
+            {'name': 'navis_ctrl_max_vel_theta', 'data': str(args['angular_speed_rad_s'])},
         ], 'params_type': 0}, 'result')
         self._service('/run_management/switch_obstacle_avoid_model', {'data': True}, 'success')
         task = '_steward_' + uuid.uuid4().hex
         self.task = task
         self._http('POST', '/set_task', {
             'mapName': args['map_name'], 'taskName': task, 'editedName': task, 'mode': 'point',
-            'speed': LINEAR_SPEED_M_S, 'rotateSpeed': ANGULAR_SPEED_RAD_S, 'evadible': 1,
+            'speed': args['linear_speed_m_s'], 'rotateSpeed': args['angular_speed_rad_s'], 'evadible': 1,
             'remark': '', 'personName': '', 'points': [{
                 'isNew': True, 'id': 'task-' + uuid.uuid4().hex,
                 'position': {'x': args['x'], 'y': args['y'], 'theta': args['heading_deg']},

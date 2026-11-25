@@ -37,8 +37,10 @@ export function apply(ctx: Context): void {
   })))
   ctx.effect(() => ctx.tools.register(defineTool({
     name: 'navigate_to_pose',
-    description: 'Move the real chassis to one absolute map pose. x/y are meters; heading_deg is degrees from map +X. Requires the named map already loaded and localized. Fixed 0.1 m/s and 0.1 rad/s, obstacle avoidance enabled. Blocks until success or failure; inspect state before dependent actions. Never retry an uncertain outcome. No object locations or routes are inferred.',
+    description: 'Move the real chassis to one absolute map pose. x/y are meters; heading_deg is degrees from map +X. Requires the named map already loaded and localized. Translation and rotation both default to 0.2; optional linear_speed_m_s is 0.1–0.5 m/s and angular_speed_rad_s is 0.1–0.4 rad/s. Hard caps cannot be overridden. Obstacle avoidance enabled. Use defaults without asking for speeds when the operator omits them. Blocks until success or failure; inspect state before dependent actions. Never retry an uncertain outcome. No object locations or routes are inferred.',
     parameters: {
+      linear_speed_m_s: { type: 'number', description: 'Translation speed in m/s, 0.1–0.5; default 0.2. Reject values above the hard cap.' },
+      angular_speed_rad_s: { type: 'number', description: 'Rotation speed in rad/s, 0.1–0.4; default 0.2. Reject values above the hard cap.' },
       x: { type: 'number', required: true, description: 'Absolute map X coordinate in meters.' },
       y: { type: 'number', required: true, description: 'Absolute map Y coordinate in meters.' },
       heading_deg: { type: 'number', required: true, description: 'Heading in degrees, -180 to 180.' },
@@ -102,10 +104,10 @@ export function apply(ctx: Context): void {
   })))
   ctx.effect(() => ctx.tools.register(defineTool({
     name: 'arms_zero',
-    description: 'Move both real Piper arms to zero joint angles at fixed 10% speed. open_grippers=true also opens both grippers to device-reported maximum travel and RELEASES held objects; false leaves gripper targets unchanged. An explicit zeroing command authorizes the motion after operator site observation; do not routinely ask for clearance again. No lift movement or automatic hardware fault reset. Success requires five fresh samples within 1 degree and, when opening, 1 mm. Failure/cancellation attempts electronic stop and latches a fault; software fault clearance does not reset device emergency stop.',
+    description: 'Move both real Piper arms to zero joint angles at fixed 10% speed. open_grippers defaults to true and opens both grippers to device-reported maximum travel and RELEASES held objects; false leaves gripper targets unchanged. A zeroing command includes opening the grippers by default; do not ask whether to open them. Explicit open_grippers=false preserves their targets. An explicit zeroing command authorizes the motion after operator site observation; do not routinely ask for clearance again. No lift movement or automatic hardware fault reset. Success requires five fresh samples within 1 degree and, when opening, 1 mm. Failure/cancellation attempts electronic stop and latches a fault; software fault clearance does not reset device emergency stop.',
     parameters: {
       timeout_s: { type: 'number', required: true, description: 'Whole operation timeout, 0.1–600 seconds; normally 30 seconds.' },
-      open_grippers: { type: 'boolean', required: true, description: 'Explicit choice: true opens and releases held objects; false preserves current gripper targets.' },
+      open_grippers: { type: 'boolean', description: 'Default true: open and release held objects. Omit or use true for ordinary zeroing; use false only to preserve current gripper targets. Do not ask for this optional parameter.' },
     }, output, execute: async (args, exec) => json(await manipulation.zeroArms(args, exec.signal)),
   })))
   ctx.effect(() => ctx.tools.register(defineTool({

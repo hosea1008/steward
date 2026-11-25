@@ -35,6 +35,36 @@ def test_reject_model_arguments_before_transport(tool, args):
         validate_arguments(tool, args)
 
 
+@pytest.mark.parametrize('key,cap', [('linear_speed_m_s', .5), ('angular_speed_rad_s', .4)])
+@pytest.mark.parametrize('value', [None, True, float('nan'), float('inf'), 0, .09, '0.2', 'above_cap'])
+def test_coordinate_speed_rejected_before_transport(key, cap, value):
+    m = Motion(config(), lambda *a: None,
+               navigation_factory=lambda *a: pytest.fail('invalid speed opened transport'))
+    try:
+        m.begin()
+        with pytest.raises(HttpError):
+            m.execute('navigate_to_pose', dict(NAV, **{key: cap + .01 if value == 'above_cap' else value}))
+        assert m.state()['active'] is None
+    finally:
+        m.close()
+
+
+@pytest.mark.parametrize('speeds,expected', [
+    ({}, (.2, .2)),
+    ({'linear_speed_m_s': .5}, (.5, .2)),
+    ({'angular_speed_rad_s': .4}, (.2, .4)),
+    ({'linear_speed_m_s': .5, 'angular_speed_rad_s': .4}, (.5, .4)),
+])
+def test_coordinate_speed_defaults_and_overrides_reach_controller(speeds, expected):
+    nav = NavFixture([pose(0), pose(1), pose(3)])
+    nav.navigate(validate_arguments('navigate_to_pose', dict(NAV, **speeds)))
+    task = next(body for path, body in nav.requests if path == '/set_task')
+    assert (task['speed'], task['rotateSpeed']) == expected
+    params = next(body for path, body in nav.requests if path == '/run_management/set_navi_params')
+    assert {p['name']: float(p['data']) for p in params['data']} == {
+        'navis_ctrl_max_vel_x': expected[0], 'navis_ctrl_max_vel_theta': expected[1]}
+
+
 def test_private_api_no_actuation_and_turn_admission():
     opened = []
     def forbidden(*args, **kwargs):
@@ -293,31 +323,31 @@ def test_navigation_observation_closes_on_disconnect_without_stop_or_fault(peer_
 
 def test_navigation_requires_new_execution_and_checks_measured_pose():
     nav = NavFixture([pose(0), pose(3), pose(1), pose(3)])
-    assert nav.navigate(NAV)['state'] == 'succeeded'
+    assert nav.navigate(validate_arguments('navigate_to_pose', NAV))['state'] == 'succeeded'
     task = next(body for path, body in nav.requests if path == '/set_task')
-    assert task['speed'] == task['rotateSpeed'] == .1
+    assert task['speed'] == task['rotateSpeed'] == .2
     assert task['points'][0]['position'] == dict(x=1.2, y=-.4, theta=90)
     assert len(task['points']) == 1
     nav = NavFixture([pose(0), pose(1), pose(3, x=5)])
     with pytest.raises(RuntimeError, match='实测位姿'):
-        nav.navigate(NAV)
+        nav.navigate(validate_arguments('navigate_to_pose', NAV))
     assert nav.dispatched
 
 
 def test_navigation_does_not_dispatch_when_speed_rejected_or_cancelled():
     nav = NavFixture([pose(0)], speed_ok=False)
     with pytest.raises(RuntimeError, match='speed'):
-        nav.navigate(NAV)
+        nav.navigate(validate_arguments('navigate_to_pose', NAV))
     assert not any(path == '/run_list_task' for path, _ in nav.requests)
     nav = NavFixture([pose(0)], cancelled=lambda: True)
     with pytest.raises(InterruptedError):
-        nav.navigate(NAV)
+        nav.navigate(validate_arguments('navigate_to_pose', NAV))
     assert not nav.dispatched
 
 
 def test_navigation_checks_both_scheduler_and_navigation_status():
     nav = NavFixture([pose(2), pose(1), {**pose(1), 'global_status': 3}, pose(3)], initial_status=2)
-    result = nav.navigate(NAV)
+    result = nav.navigate(validate_arguments('navigate_to_pose', NAV))
     assert result['state'] == 'succeeded'
     assert result['pose']['smachStatus'] == 3
     assert result['pose']['taskName'] == 'list_task'
@@ -325,27 +355,27 @@ def test_navigation_checks_both_scheduler_and_navigation_status():
     assert result['navigation_status'] == 3
     busy = NavFixture([pose(0)], initial_status=1)
     with pytest.raises(RuntimeError, match='未空闲'):
-        busy.navigate(NAV)
+        busy.navigate(validate_arguments('navigate_to_pose', NAV))
     assert not busy.dispatched
     stuck = NavFixture([pose(1)], initial_status=2)
     with pytest.raises(RuntimeError, match='未空闲'):
-        stuck.navigate(NAV)
+        stuck.navigate(validate_arguments('navigate_to_pose', NAV))
     assert not stuck.requests
 
 
 def test_navigation_accepts_cleared_identity_only_after_own_task_completed():
     nav = NavFixture([pose(0), pose(1), {**pose(3), 'taskName': '', 'btName': ''}])
-    assert nav.navigate(NAV)['state'] == 'succeeded'
+    assert nav.navigate(validate_arguments('navigate_to_pose', NAV))['state'] == 'succeeded'
 
 
 def test_navigation_rejects_actual_task_replacement_and_global_errors():
     nav = NavFixture([pose(0), pose(1), {**pose(1), 'btName': 'another-controller'}])
     with pytest.raises(RuntimeError, match='其他控制端替换') as error:
-        nav.navigate(NAV)
+        nav.navigate(validate_arguments('navigate_to_pose', NAV))
     assert error.value.feedback[POSE_TOPIC]['btName'] == 'another-controller'
     nav = NavFixture([pose(0), pose(1), {**pose(1), 'global_status': 7}])
     with pytest.raises(RuntimeError, match='异常状态: 7'):
-        nav.navigate(NAV)
+        nav.navigate(validate_arguments('navigate_to_pose', NAV))
 
 
 def test_navigation_cancellation_ends_scheduler_despite_turn_cancellation():

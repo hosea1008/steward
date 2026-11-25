@@ -34,8 +34,10 @@ export interface JsonObject {
   [key: string]: unknown
 }
 
-/** Absolute navigation target in the already loaded and localized map. Speeds are runtime-owned. */
+/** Absolute navigation target in the loaded map. Runtime resolves default speeds and enforces caps. */
 export interface NavigateToPoseRequest {
+  linear_speed_m_s?: number
+  angular_speed_rad_s?: number
   x: number
   y: number
   heading_deg: number
@@ -89,10 +91,10 @@ export interface WamOperateRequest {
   expected_execute_steps?: number
 }
 
-/** Joint zero may release held objects only when explicitly requested. */
+/** Joint zero opens grippers by default; false preserves their targets. */
 export interface ArmsZeroRequest {
   timeout_s: number
-  open_grippers: boolean
+  open_grippers?: boolean
 }
 
 /** Optional real-arm capability, independent of simulated skills and prediction receipts. */
@@ -104,7 +106,7 @@ export interface EgoManipulation {
    */
   operateWam(request: WamOperateRequest, signal?: AbortSignal): Promise<JsonObject>
   /** Move both arms to joint zero, optionally opening grippers to their queried limits.
-   * @param request - deadline and explicit gripper-opening choice.
+   * @param request - deadline and optional gripper-opening choice (defaults to true).
    * @param signal - cancellation; physical rest still needs confirmation after failure.
    * @returns fresh measured arrival or failure with stop evidence.
    */

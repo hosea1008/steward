@@ -12,7 +12,8 @@ import threading
 import time
 
 from steward.net import CancellableHandler, HttpError, JsonServer
-from .drivers.navigation import Navigation, NavigationError, LINEAR_SPEED_M_S, ANGULAR_SPEED_RAD_S
+from .drivers.navigation import (Navigation, NavigationError, LINEAR_SPEED_M_S, ANGULAR_SPEED_RAD_S,
+                                 MAX_LINEAR_SPEED_M_S, MAX_ANGULAR_SPEED_RAD_S)
 from .drivers.lift import LiftController, LiftError
 from .drivers.manipulation import ArmWorker, WAM_SPEED_PERCENT, resolve as resolve_manipulation
 from .drivers.arm_zero import ZERO_SPEED_PERCENT
@@ -27,16 +28,20 @@ def validate_arguments(tool, args):
         return resolve_timed_move(args)
     if tool in ('wam_operate', 'arms_zero'):
         return resolve_manipulation(tool, args)
-    fields = ({'x', 'y', 'heading_deg', 'map_name', 'timeout_s', 'position_tolerance_m', 'heading_tolerance_deg'}
+    fields = ({'x', 'y', 'heading_deg', 'map_name', 'timeout_s', 'position_tolerance_m', 'heading_tolerance_deg',
+               'linear_speed_m_s', 'angular_speed_rad_s'}
               if tool == 'navigate_to_pose' else {'action', 'height_mm', 'timeout_s'})
     if tool not in ('navigate_to_pose', 'lift_move') or args.keys() - fields:
-        raise HttpError(400, '未知工具或参数；速度不可覆盖')
+        raise HttpError(400, '未知工具或参数')
     def number(key, low, high):
         value = args.get(key)
         if type(value) not in (int, float) or not math.isfinite(value) or not low <= value <= high:
             raise HttpError(400, f'{key} 必须是 {low} 到 {high} 之间的有限数值')
     number('timeout_s', .1, 600)
     if tool == 'navigate_to_pose':
+        args = {'linear_speed_m_s': LINEAR_SPEED_M_S, 'angular_speed_rad_s': ANGULAR_SPEED_RAD_S, **args}
+        number('linear_speed_m_s', .1, MAX_LINEAR_SPEED_M_S)
+        number('angular_speed_rad_s', .1, MAX_ANGULAR_SPEED_RAD_S)
         for key in ('x', 'y'):
             number(key, -1e6, 1e6)
         number('heading_deg', -180, 180)
@@ -99,6 +104,7 @@ class Motion:
                     'fault_id': self.fault_id, 'last_fault_clear': self.last_fault_clear,
                     'map_name': self.config['navigation']['map'],
                     'limits': {'linear_m_s': LINEAR_SPEED_M_S, 'angular_rad_s': ANGULAR_SPEED_RAD_S,
+                               'max_linear_m_s': MAX_LINEAR_SPEED_M_S, 'max_angular_rad_s': MAX_ANGULAR_SPEED_RAD_S,
                                'timed_move_default_speed': DEFAULT_SPEED, 'timed_move_max_speed': MAX_SPEED,
                                'wam_arm_percent': WAM_SPEED_PERCENT, 'zero_arm_percent': ZERO_SPEED_PERCENT,
                                'lift_rpm': LiftController.MOTOR_RPM, 'lift_height_mm': [0, 750]},

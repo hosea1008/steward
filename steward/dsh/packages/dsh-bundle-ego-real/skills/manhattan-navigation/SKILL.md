@@ -11,7 +11,7 @@ description: 真机曼哈顿路径导航。操作员要求按地图 X 再 Y 的�
 
 从操作员或本轮 task context 取得最终目标 `x`、`y`（地图米制坐标）、`heading_deg`（相对地图 +X 的角度，−180 至 180）。缺少目标坐标或最终朝向时询问，不猜测物料位置。地图名可来自操作员、task context 或本次有效设备反馈；若指定地图与设备地图不同，停止，不切换地图。
 
-使用操作员给定的合法超时和容差；未指定时，每段导航 `timeout_s=120`、`position_tolerance_m=0.05`、`heading_tolerance_deg=5`，状态查询 `timeout_s=5`。导航超时按段计算，不是整条路径的总期限；底盘限速由工具固定，skill 不覆盖。
+使用操作员给定的合法超时和容差；未指定时，每段导航 `timeout_s=120`、`position_tolerance_m=0.05`、`heading_tolerance_deg=5`，状态查询 `timeout_s=5`。导航超时按段计算，不是整条路径的总期限；坐标导航默认平移速度 0.2 m/s、旋转速度 0.2 rad/s，无需追问速度。若操作员指定速度，每段都传入 `linear_speed_m_s`（0.1–0.5）和／或 `angular_speed_rad_s`（0.1–0.4）；未指定的项使用工具默认值，不超过硬上限。
 
 先调用 `ego_state` 检查故障、运动权限和活动动作，再调用 `get_navigation_state` 获取起点。运动任务要求没有软件故障、运动已启用、没有活动动作；设备查询必须 `state=succeeded`、`pose_valid=true`，两层地图一致且非空，`scheduler_status` 与 `navigation_status.status` 均为 0、2 或 3。其他状态或缺失反馈均停止，不把缓存 ego_state 当作当前位姿。仅要求规划或解释时允许只读查询，不调用运动工具。
 

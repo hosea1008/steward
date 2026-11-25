@@ -35,10 +35,15 @@ def test_invalid_wam_arguments_rejected(args):
         resolve('wam_operate', args)
 
 
-def test_zero_requires_explicit_release_choice():
-    with pytest.raises(HttpError):
-        resolve('arms_zero', {'timeout_s': 30})
+def test_zero_opens_grippers_by_default_and_preserves_explicit_false():
+    assert resolve('arms_zero', {'timeout_s': 30}) == dict(timeout_s=30, open_grippers=True)
     assert resolve('arms_zero', ZERO) == ZERO
+
+
+@pytest.mark.parametrize('value', [None, 0, 1, 'true', 'false'])
+def test_zero_rejects_non_boolean_gripper_choice(value):
+    with pytest.raises(HttpError):
+        resolve('arms_zero', dict(timeout_s=30, open_grippers=value))
 
 
 @pytest.mark.parametrize('tool,args', [('wam_operate', WAM), ('arms_zero', ZERO)])

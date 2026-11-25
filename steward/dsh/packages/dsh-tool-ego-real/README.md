@@ -31,7 +31,7 @@ Task context is managed by the [console](../../../src/steward/ego/real/console/R
 
 ## WAM 和双臂归零
 
-`wam_operate` 和 `arms_zero` 分别调用 `ctx.ego.manipulation.operateWam` / `zeroArms`；provider 均转发到 Motion `/execute`，与底盘和升降串行化。参数在打开进程或设备前由 `drivers/manipulation.py` 验证并解析默认值。地址、Python 环境和依赖路径只来自机器人配置；工具中没有物料判断、固定 prompt 或 chunk 数。`factory-wam-operation` 负责这些任务参数和后续顺序。
+`wam_operate` 和 `arms_zero` 分别调用 `ctx.ego.manipulation.operateWam` / `zeroArms`；provider 均转发到 Motion `/execute`，与底盘和升降串行化。参数在打开进程或设备前由 `drivers/manipulation.py` 验证并解析默认值。地址、Python 环境和依赖路径只来自机器人配置；工具中没有物料判断、固定 prompt 或 chunk 数。`factory-wam-operation` 负责这些任务参数和后续顺序。`arms_zero.open_grippers` 可省略，运行时默认 true，归零时打开双夹爪；工具描述要求不再询问该可选参数，显式 false 保留夹爪目标。
 
 `drivers/cosmos.py` 隔离 Cosmos v2 握手及执行桥接；后续更换 WAM 接口时在驱动层提供适配器，并同步配置校验与模拟协议测试，不把协议或凭据塞进模型工具。`drivers/arm_zero.py` 保存独立双臂归零算法。worker 共用 `/tmp/piper-real-robot.lock`，禁止同本机遵守该锁的其他 Piper 客户端同时控制；不承诺阻止忽略该锁的外部程序。
 
@@ -41,7 +41,7 @@ WAM 的成功结果只表示有限 chunk 执行结束，保留 `task_success=unk
 
 `move_for_duration` → `ctx.ego.motion.moveForDuration` → provider `/execute` → `Motion` → `drivers/timed_move.py`。驱动独立保存 NAVIS 虚拟摇杆协议，不导入或启动 `../NAVIS`。复用 `navigation.websocket_url`，不读取地图或物料位置，不发送导航任务、自动恢复或 HTTP 登录。与其他运动共用串行化、禁用运动检查、取消和故障锁。
 
-`direction` 与 `duration_s` 必填，`speed` 可选、默认 0.2、固定上限 0.5；校验由运行时在打开连接之前完成，不静默截断超限值。方向、单位和范围由工具参数描述送入模型，部署、使用限制及结果语义见控制台指南。修改默认速度或范围时同步运行时解析、工具描述、网页文案和行为测试；地图导航的固定 0.1 速度不受此工具影响。
+`direction` 与 `duration_s` 必填，`speed` 可选、默认 0.2、固定上限 0.5；校验由运行时在打开连接之前完成，不静默截断超限值。方向、单位和范围由工具参数描述送入模型，部署、使用限制及结果语义见控制台指南。修改默认速度或范围时同步运行时解析、工具描述、网页文案和行为测试；地图导航使用独立的可选参数 `linear_speed_m_s`（0.1–0.5 m/s）和 `angular_speed_rad_s`（0.1–0.4 rad/s），均默认 0.2，由 Motion 解析并验证上限后送入控制器。
 
 操作员明确指令作为现场观察后的执行授权；模型可直接调用已注册工具，不为普通动作重复索取安全确认。工具描述区分执行失败与缺少独立物理效果验证，后者不单独增加审批步骤。故障锁、参数校验、限速和取消语义仍由运行时执行，故障恢复不能伪造操作员的停稳检查事实。
 

@@ -12,7 +12,7 @@ from steward.ego.real.console.chat import RealChat
 home = Path(sys.argv[1])
 cases = [
     ('timed-move', '底盘后退2秒。', ['move_for_duration']),
-    ('zero', '双臂归零并张开夹爪。', ['arms_zero']),
+    ('zero', '双臂归零。', ['arms_zero']),
     ('return-and-zero', '在当前位置归还袋装纸盒，并按规程完成归零。', ['wam_operate', 'arms_zero']),
     ('missing-duration', '底盘后退。', []),
     ('retained-fault', '底盘后退2秒。', []),
@@ -47,7 +47,7 @@ for name, prompt, expected in cases:
                 assert args['max_chunks'] == 5, args
                 return {'state': 'succeeded', 'execution_complete': True, 'task_success': 'unknown'}
             if tool == 'arms_zero':
-                assert args['open_grippers'] is True, args
+                assert args.get('open_grippers', True) is True, args
                 return {'state': 'succeeded', 'arrival_confirmed': True}
             raise AssertionError(('unexpected tool', body))
         raise AssertionError(('unexpected endpoint', path))

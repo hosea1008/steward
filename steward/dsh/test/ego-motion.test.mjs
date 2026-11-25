@@ -73,11 +73,11 @@ test('console native calls carry tool descriptions and the saved context on ever
         { name: 'ego_state', arguments: {} },
         { name: 'get_navigation_state', arguments: {timeout_s: 5} },
         { name: 'clear_motion_fault', arguments: {fault_id: 'fixture-fault', operator_confirmed_stopped: true, reason: '操作员已确认停稳并检查现场'} },
-        { name: 'navigate_to_pose', arguments: {x: 1.2, y: -0.4, heading_deg: 90, map_name: 'fixture-map', timeout_s: 20, position_tolerance_m: 0.05, heading_tolerance_deg: 2} },
+        { name: 'navigate_to_pose', arguments: {x: 1.2, y: -0.4, heading_deg: 90, map_name: 'fixture-map', timeout_s: 20, position_tolerance_m: 0.05, heading_tolerance_deg: 2, linear_speed_m_s: .5, angular_speed_rad_s: .4} },
         { name: 'lift_move', arguments: {action: 'height', height_mm: 220, timeout_s: 15} },
         { name: 'skill', arguments: {name: 'factory-wam-operation'} },
         { name: 'wam_operate', arguments: {prompt: 'Pick up one box from the material box and hold it steady with the right arm.', max_chunks: 8, timeout_s: 600} },
-        { name: 'arms_zero', arguments: {timeout_s: 30, open_grippers: false} },
+        { name: 'arms_zero', arguments: {timeout_s: 30} },
         { name: 'move_for_duration', arguments: {direction: 'backward', speed: .3, duration_s: 2} },
       ]
       const call = step === 11 ? {name: 'skill', arguments: {name: 'factory-wam-operation'}} : calls[step]

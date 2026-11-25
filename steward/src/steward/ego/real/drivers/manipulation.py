@@ -32,11 +32,11 @@ def resolve(tool, args):
         if (type(v) not in ((int,) if integer else (int, float))
                 or not math.isfinite(v) or not low <= v <= high):
             raise HttpError(400, f'{key} 必须在 {low}–{high} 之间' + ('且为整数' if integer else ''))
-    values = {**(WAM_DEFAULTS if tool == 'wam_operate' else {}), **args}
+    values = {**(WAM_DEFAULTS if tool == 'wam_operate' else {'open_grippers': True}), **args}
     number('timeout_s', .1, 600)
     if tool == 'arms_zero':
         if type(values.get('open_grippers')) is not bool:
-            raise HttpError(400, 'open_grippers 必须明确为 true 或 false；true 会释放持物')
+            raise HttpError(400, 'open_grippers 必须为布尔值；默认 true，会释放持物')
         return values
     if not isinstance(values.get('prompt'), str) or not 1 <= len(values['prompt'].strip()) <= 10000:
         raise HttpError(400, 'prompt 必须为非空字符串，最多 10000 字符')
