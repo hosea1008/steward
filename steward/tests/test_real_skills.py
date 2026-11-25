@@ -1,4 +1,4 @@
-"""Packaged skill discovery, immutable UI/model text, and read-only HTTP access."""
+"""Packaged skill discovery, idle disk edits, and consistent UI/model snapshots."""
 from pathlib import Path
 from types import SimpleNamespace
 import json
@@ -26,7 +26,8 @@ def test_catalog_freezes_exact_instructions_and_cleans_up(tmp_path):
     try:
         original = path.read_text()
         path.write_text('changed after connection')
-        assert catalog.summaries() == [{'name': 'fixture-skill', 'description': '测试描述'}]
+        assert catalog.summaries() == [{'name': 'fixture-skill', 'description': '测试描述',
+                                       'revision': catalog.detail('fixture-skill')['revision']}]
         assert catalog.detail('fixture-skill')['text'] == original
         directory = Path(catalog.directory)
         assert (directory/'fixture-skill/SKILL.md').read_text() == original
@@ -85,7 +86,7 @@ def test_console_overlay_loads_only_packaged_skills_without_code_tools(tmp_path)
         assert patch['ptc-runtime']['disabled'] is True
         assert patch['workflow-ptc']['disabled'] is True
         assert 'tool-bash' not in patch and 'tool-fs' not in patch
-        assert [s['name'] for s in chat.skills.summaries()] == ['manhattan-navigation']
+        assert [s['name'] for s in chat.skills.summaries()] == ['factory-wam-operation', 'manhattan-navigation']
         assert (Path(cfg['bundledSkillDir'])/'manhattan-navigation/SKILL.md').read_text() == (SKILL_DIR/'manhattan-navigation/SKILL.md').read_text()
     finally:
         chat.close()
@@ -112,3 +113,75 @@ def test_skill_viewer_rejects_stale_generation_and_unknown_names():
     finally:
         server.stop()
         catalog.close()
+
+
+def test_saved_skill_updates_disk_snapshot_and_rejects_stale_edits(tmp_path):
+    path = write_skill(tmp_path)
+    catalog = SkillCatalog(tmp_path)
+    original = path.read_text()
+    old_directory = Path(catalog.directory)
+    updated = original.replace('正文', '新规程')
+    try:
+        detail = catalog.save('fixture-skill', updated, original)
+        assert detail['text'] == path.read_text() == updated
+        assert not old_directory.exists()
+        assert (Path(catalog.directory)/'fixture-skill/SKILL.md').read_text() == updated
+        assert catalog.summaries()[0]['revision'] == detail['revision']
+        with pytest.raises(HttpError) as error:
+            catalog.save('fixture-skill', original, original)
+        assert error.value.status == 409 and path.read_text() == updated
+        path.write_text(updated + '外部修改\n')
+        with pytest.raises(HttpError) as error:
+            catalog.save('fixture-skill', original, updated)
+        assert error.value.status == 409 and '外部修改' in path.read_text()
+    finally: catalog.close()
+
+
+@pytest.mark.parametrize('edit', ['invalid yaml', '---\nname: other\ndescription: x\n---\nbody',
+    '---\nname: fixture-skill\ndescription: x\ndisable-model-invocation: true\n---\nbody', 'x'*64001])
+def test_invalid_skill_save_leaves_disk_and_snapshot_unchanged(tmp_path, edit):
+    path=write_skill(tmp_path); catalog=SkillCatalog(tmp_path); original=path.read_text()
+    try:
+        directory=catalog.directory
+        with pytest.raises(HttpError): catalog.save('fixture-skill',edit,original)
+        assert path.read_text()==original
+        assert catalog.directory==directory
+    finally: catalog.close()
+
+
+def test_skill_save_failure_does_not_publish_new_text(tmp_path, monkeypatch):
+    path=write_skill(tmp_path); catalog=SkillCatalog(tmp_path); original=path.read_text()
+    def fail_replace(*args): raise OSError('disk failure')
+    monkeypatch.setattr(Path,'replace',fail_replace)
+    try:
+        with pytest.raises(OSError): catalog.save('fixture-skill',original+'new\n',original)
+        assert path.read_text()==catalog.detail('fixture-skill')['text']==original
+        assert not list(path.parent.glob('.skill-*'))
+        assert (Path(catalog.directory)/'fixture-skill/SKILL.md').read_text()==original
+    finally: catalog.close()
+
+
+def test_skill_editor_http_rejects_busy_stale_generation_and_paths(tmp_path):
+    source=tmp_path/'skills';source.mkdir(); path=write_skill(source)
+    motion=SimpleNamespace(begin=lambda:None,stop=lambda:None)
+    chat=RealChat({'id':'fixture','name':'Fixture'},motion,tmp_path/'home',tmp_path/'absent.env')
+    chat.skills.close(); chat.skills=SkillCatalog(source)
+    console=Console({}); console.phase='connected';console.generation=7
+    console.agent=SimpleNamespace(chat=chat)
+    server=make_server(console,port=0,host='127.0.0.1').start()
+    original=path.read_text()
+    body=dict(name='fixture-skill',generation=7,previous=original,text=original+'新行\n')
+    try:
+        chat.agents['robot'].busy=True
+        with pytest.raises(HttpError) as error: call('POST',server.url+'/api/skill',body)
+        assert error.value.status==409 and path.read_text()==original
+        chat.agents['robot'].busy=False
+        for patch,status in [({'generation':6},409),({'name':'../key.txt'},404),({'generation':True},400)]:
+            with pytest.raises(HttpError) as error: call('POST',server.url+'/api/skill',{**body,**patch})
+            assert error.value.status==status
+        result=call('POST',server.url+'/api/skill',body)
+        assert result['text']==path.read_text()==body['text']
+        assert chat.skill_updates=={'fixture-skill':result['revision']}
+        assert call('GET',server.url+'/api/skill?generation=7&name=fixture-skill')['text']==body['text']
+    finally:
+        server.stop();chat.agents['robot'].busy=False;chat.close()

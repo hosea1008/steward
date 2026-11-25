@@ -1,12 +1,12 @@
 # Real robot tools
 
-The default export and `./provider` implement the workstation admission API used by the native `ego-real` profile. `./motion` registers `get_navigation_state`, `navigate_to_pose`, `lift_move`, `clear_motion_fault`, `ego_state` and `body_stop` for the real console's native overlay. The model calls existing tools directly; registrations use the normal guarded tool pipeline and are disposed with their plugin.
+The default export and `./provider` implement the workstation admission API used by the native `ego-real` profile. `./motion` registers `get_navigation_state`, `navigate_to_pose`, `lift_move`, `wam_operate`, `arms_zero`, `clear_motion_fault`, `ego_state` and `body_stop` for the real console's native overlay. The model calls existing tools directly; registrations use the normal guarded tool pipeline and are disposed with their plugin.
 
-The console overlay loads `./motion-provider` as the `ctx.ego` provider and `./motion` as its tool consumer. Only the provider receives `endpoint`, a private `token`, and `timeoutMs`; the tool plugin has no connection configuration. The provider exposes the optional `EgoMotion` and `EgoNavigation` interfaces declared in `@steward/dsh-ego`, plus cached `summary` and turn-scoped `stop`. It reuses the Ego HTTP client base, but Motion does not implement the base client's other Ego API endpoints. The overlay disables the workstation provider and tools and does not load the simulation bundle. A provider registration alone exposes no model tools.
+The console overlay loads `./motion-provider` as the `ctx.ego` provider and `./motion` as its tool consumer. Only the provider receives `endpoint`, a private `token`, and `timeoutMs`; the tool plugin has no connection configuration. The provider exposes the optional `EgoMotion`, `EgoNavigation` and `EgoManipulation` interfaces declared in `@steward/dsh-ego`, plus cached `summary` and turn-scoped `stop`. It reuses the Ego HTTP client base, but Motion does not implement the base client's other Ego API endpoints. The overlay disables the workstation provider and tools and does not load the simulation bundle. A provider registration alone exposes no model tools.
 
 The console owns the loopback Motion runtime and passes connection settings in its per-turn overlay; neither the token nor device credentials are model parameters. Request aborts close the HTTP call, allowing the runtime to cancel the operation. An ambiguous transport failure must not be retried automatically. Tool results contain an execution `state`; the agent must check it before continuing dependent actions. The Motion runtime and the workstation Runtime remain separate execution owners; using `ctx.ego` does not merge their locks, jobs or control leases.
 
-The [console guide](../../../src/steward/ego/real/console/README.md) owns deployment, parameter units, fixed speed limits, explicit homing, stop guarantees and live-test restrictions. Motion does not depend on a workstation camera admission or enable WAM manipulation. No material names, target coordinates or factory routes are built into these tools.
+The [console guide](../../../src/steward/ego/real/console/README.md) owns deployment, parameter units, fixed speed limits, explicit homing, stop guarantees and live-test restrictions. Motion uses its own WAM worker and does not depend on workstation camera admission. No material names, target coordinates or factory routes are built into these tools.
 
 `clear_motion_fault` calls `ctx.ego.motion.clearFault`, implemented by the provider's private `/clear-fault` request. The runtime requires the current `fault_id`, an explicit operator stop/inspection acknowledgement and a reason. It atomically rejects stale identities and unfinished operations, preserves failure evidence, and logs the clearance. No device transport is opened; hardware faults and lift origin are untouched. Clearance does not reset cancellation, enable actuation or retry a failed operation. The confirmation is operator-supplied information, not independent sensor evidence. See the console guide for operator wording and recovery limits.
 
@@ -28,3 +28,11 @@ Build with `pnpm --dir steward/dsh run build` from the repository root. The reco
 在 `steward/dsh` 下运行 `pnpm run build`，再运行 `node --test test/ego-motion-service.test.mjs test/ego-motion.test.mjs test/ego-real.test.mjs`。测试环境的 PATH 需要包含 pnpm 和 Python 3.11+；控制台与运动运行时的 Python 回归测试位于 `steward/tests/test_real_console.py` 和 `steward/tests/test_real_motion.py`。
 
 Task context is managed by the [console](../../../src/steward/ego/real/console/README.md#task-context-的保存和发送), not by individual tools. Each turn includes the saved snapshot as logged user data, including an explicit empty value after clearing it. Tool descriptions stay generic so the same tool can act on different operator-provided contexts.
+
+## WAM 和双臂归零
+
+`wam_operate` 和 `arms_zero` 分别调用 `ctx.ego.manipulation.operateWam` / `zeroArms`；provider 均转发到 Motion `/execute`，与底盘和升降串行化。参数在打开进程或设备前由 `drivers/manipulation.py` 验证并解析默认值。地址、Python 环境和依赖路径只来自机器人配置；工具中没有物料判断、固定 prompt 或 chunk 数。`factory-wam-operation` 负责这些任务参数和后续顺序。
+
+`drivers/cosmos.py` 隔离 Cosmos v2 握手及执行桥接；后续更换 WAM 接口时在驱动层提供适配器，并同步配置校验与模拟协议测试，不把协议或凭据塞进模型工具。`drivers/arm_zero.py` 保存独立双臂归零算法。worker 共用 `/tmp/piper-real-robot.lock`，禁止同本机遵守该锁的其他 Piper 客户端同时控制；不承诺阻止忽略该锁的外部程序。
+
+WAM 的成功结果只表示有限 chunk 执行结束，保留 `task_success=unknown` 和 SDK 运动反馈。双臂归零则要求新鲜到位反馈。取消、超时和错误尝试双臂电子急停；任一连接/停止/清理失败均报告，不自动复位或重试。子进程 8 秒内未退出则强制终止，退出不代表设备停稳，Motion 保留故障。新增机械臂动作必须沿用此所有权与停止流程。

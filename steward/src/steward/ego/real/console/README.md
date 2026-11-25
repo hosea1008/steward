@@ -1,6 +1,6 @@
 # 真机控制台
 
-控制台监听 `0.0.0.0:8400/console`，提供真机配置选择、三路实时相机、DEBUG 日志和 DeepSeek Flash 操作员对话。对话沿用仿真控制台的 Harness 会话和调用记录：模型按工具描述直接调用注册的导航、升降工具；使用原生 function calling，不提供现场编程入口。连接诊断只显示在日志区；对话区显示操作员消息、工具名称与参数、工具返回和助手答复。WAM 抓取与模型图像理解尚未接入本控制台。
+控制台监听 `0.0.0.0:8400/console`，提供真机配置选择、三路实时相机、DEBUG 日志和 DeepSeek Flash 操作员对话。对话沿用仿真控制台的 Harness 会话和调用记录：模型按工具描述直接调用注册的真机工具；使用原生 function calling，不提供现场编程入口。连接诊断只显示在日志区；对话区显示操作员消息、工具名称与参数、工具返回和助手答复。WAM 通过独立双臂工具执行；对话模型仍没有相机图像理解能力。
 
 导航、升降、缓存状态和停止工具通过 `ctx.ego` 调用真机 provider，再访问控制台拥有的 Motion 运行时；工具层不直接连接设备或 HTTP 服务。配置只加载真机运动工具，共用 `ctx.ego` 不会自动加载仿真工具。后续开发遵循[添加真机工具的流程](../../../../../dsh/packages/dsh-tool-ego-real/README.md#添加真机工具的流程)，其中说明服务定义、provider、运行时、模型描述和测试各自的职责。
 
@@ -25,7 +25,7 @@ PYTHONPATH=steward/src steward/.venv/bin/python -m steward.ego.real.console --ke
 
 打开网页，选择 **Agilex Cobot Magic** 并点击“加载并连接”。加载配置只建立观测和工具入口，不移动、不自动归零、不切换地图。相机服务和已定位的导航地图需预先运行；升降串口不能被其他控制节点占用。默认地图为 `B308-V3`，相机服务在本机 `5000` 端口。Agent 缺少密钥或 profile 时网页会显示具体原因，画面仍可查看。
 
-`--no-actuation` 启用服务端禁止运动模式：对话和 `ego_state` 可以运行，但两个运动工具在打开设备前被拒绝。适合验证模型连接与页面。正常模式下，只有发出操作员任务后才可能执行动作。页面没有登录认证，只应向可信操作员网络开放；`--host 127.0.0.1` 可限制为本机访问。
+`--no-actuation` 启用服务端禁止运动模式：对话和 `ego_state` 可以运行，但所有运动工具在打开设备前被拒绝。适合验证模型连接与页面。正常模式下，只有发出操作员任务后才可能执行动作。页面没有登录认证，只应向可信操作员网络开放；`--host 127.0.0.1` 可限制为本机访问。
 
 ## 工具参数与结果
 
@@ -34,6 +34,8 @@ PYTHONPATH=steward/src steward/.venv/bin/python -m steward.ego.real.console --ke
 | `get_navigation_state` | `timeout_s`（必填，0.1–30 秒） | 只读获取底盘地图位置、朝向、定位有效性、两层导航状态、当前任务及进度 |
 | `navigate_to_pose` | `x`、`y`（地图米制坐标），`heading_deg`（相对地图 +X 的角度，−180 至 180），`map_name`，`timeout_s`，`position_tolerance_m`，`heading_tolerance_deg` | 单个地图目标位姿；固定线速度 0.1 m/s、角速度 0.1 rad/s，开启避障；不含物料坐标、固定路线或速度入参 |
 | `lift_move` | `action: "height"`、`height_mm`（整数 0–750）、`timeout_s`；或者 `action: "home"`、`timeout_s` | 固定 400 RPM；height 是绝对高度；home 真实向下运行至限位并归零，不能带 height_mm；不会自动 home |
+| `wam_operate` | `prompt`、`max_chunks`、`timeout_s`，其他通用参数可选 | 执行 WAM 双臂动作，不自动归零；详见下方部署说明 |
+| `arms_zero` | `timeout_s`、`open_grippers` | 双臂关节归零；是否张开夹爪必须明确传入 |
 | `clear_motion_fault` | `fault_id`、`operator_confirmed_stopped: true`、`reason` | 现场检查后清除当前软件故障锁定；不发送设备指令，不归零、不重试 |
 | `ego_state` | 无 | 读取配置、限速、当前动作及最近结果的缓存；不测量实时位姿或升降零点 |
 | `body_stop` | 无 | 取消本轮动作、等待停止反馈，本轮不再接受运动 |
@@ -62,7 +64,7 @@ NAVIS 驱动同时检查 `/agx_smach_state` 的任务调度状态和 `/run_manag
 
 ## 真机 Skills
 
-“已支持的工具”下方的“已支持的 Skills”展示当前机器人连接的技能目录，点击名称可展开完整 `SKILL.md` 文本。当前提供 `manhattan-navigation`；可输入“按曼哈顿路径导航到地图中的 x=…、y=…、朝向=…”。目标值来自操作员或 task context。原生 Harness 在模型请求开始时提供技能摘要，再由模型调用 `skill` 加载正文；无需开放现场编程。网页和模型使用连接时的同一份技能快照，新增或修改技能后需要重新连接配置。后续开发步骤、自动发现范围和验证方法见[真机 skills 接入说明](../../../../../dsh/packages/dsh-bundle-ego-real/README.md#添加真机-skill)。
+“已支持的工具”下方的“已支持的 Skills”展示当前机器人连接的技能目录，点击名称可展开完整 `SKILL.md` 文本并编辑。当前提供 `manhattan-navigation` 和 `factory-wam-operation`；可输入“按曼哈顿路径导航到地图中的 x=…、y=…、朝向=…”。目标值来自操作员或 task context。原生 Harness 在模型请求开始时提供技能摘要，再由模型调用 `skill` 加载正文；无需开放现场编程。网页和模型共用技能快照；网页保存会直接原子更新技能目录中的 `SKILL.md`，空闲时更新快照供下一轮使用，任务执行期间不能保存。保存校验 YAML、名称、描述和正文，拒绝旧页面覆盖新版本；失败保留编辑草稿。保存后的模型请求会记录版本更新提示，要求使用前重新加载正文，不清空原会话。新增技能或从外部编辑文件后，需要重新连接配置。后续开发步骤、自动发现范围和验证方法见[真机 skills 接入说明](../../../../../dsh/packages/dsh-bundle-ego-real/README.md#添加真机-skill)。
 
 ## Task context 的保存和发送
 
@@ -84,3 +86,13 @@ node --check steward/src/steward/ego/real/console/static/app.js
 ```
 
 Python 测试使用模拟驱动，DSH 录制测试使用独立 HTTP 模型与设备接口，验证模型经 ctx.ego 调用清除故障、导航和升降工具、每轮上下文快照及清空后的续聊。真实模型只读验证可用 `--no-actuation` 启动后要求“只调用 ego_state，禁止任何运动”。这些检查不替代首次真机导航、升降和停止距离验收。
+
+## Cosmos WAM 与双臂归零部署
+
+`wam_operate` 必填 `prompt`、`max_chunks`（1–1000）和 `timeout_s`（0.1–600 秒）。工具还暴露关节控制模式、控制周期、模型频率校验、预期 execute_steps、平滑参数、夹爪比例和预测视频开关；定义及范围见模型工具描述。当前适配器支持 `movej` / `movejs`，机械臂速度固定 25%；不开放 CPV 或 EEF 模式。`arms_zero` 必填 `timeout_s` 和 `open_grippers`，固定 10% 速度；true 会完全张开双夹爪并释放持物，false 不改变夹爪目标。
+
+机器人 JSON 的 `wam` 配置保存 `adapter: cosmos-piper-v2`、`host`、`port`、`python`、`cosmos_repo`、`piper_client_dir`、`python_paths`、`environment`、`log_dir` 及 `camera_width/height/fps`。机械臂 CAN 和相机 ROS topic 复用 `arms` / `cameras`。使用自定义旧配置时，从[默认配置](configs/agilex-cobot-magic.json)补充 `wam`，核对本机路径与端口后重启；缺少配置会在启动时明确报错。
+
+执行桥接、子进程管理及归零算法均在 Steward 的 [drivers](../drivers) 内，不读取、导入或启动 `../agent`，也不读取其任务配置或 prompt。外部环境仍需安装设备与模型客户端库：当前 `wam.python` 为 `piper_new` 环境，提供 `piper_sdk`、`pyAgxArm`、ROS、OpenCV、NumPy、SciPy、msgpack 和 websockets 15+；`cosmos_repo` 指向已安装 Cosmos 客户端库，`piper_client_dir` 指向已验证的 Piper 相机/控制/平滑/记录库。迁移到另一台机器需要安装这些依赖并调整配置，不能只复制仓库后假设硬件 SDK 已存在。控制台 Python 与设备 worker Python 可以不同。
+
+每次调用保存到 `wam.log_dir` 下独立目录，包含请求、worker 日志、最终结果，以及 WAM SDK 生成的反馈、动作和视频记录。失败结果保留日志路径；超时或强制终止后物理状态未知，必须检查现场。WAM 执行完 chunk 不等于识别或验证物料操作成功，也不会自动归零；物料 prompt、预算和归还后归零顺序只在 `factory-wam-operation` skill 中维护。

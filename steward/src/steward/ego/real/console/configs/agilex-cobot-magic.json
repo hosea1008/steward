@@ -58,5 +58,23 @@
     "port": "/dev/serial/by-id/usb-1a86_USB_Serial-if00-port0",
     "motor_id": 1,
     "serial_timeout_s": 0.3
+  },
+  "wam": {
+    "adapter": "cosmos-piper-v2",
+    "host": "127.0.0.1",
+    "port": 8000,
+    "python": "/home/agilex/miniconda3/envs/piper_new/bin/python",
+    "cosmos_repo": "/home/agilex/models/causal-cosmos/cosmos-framework",
+    "piper_client_dir": "/home/agilex/models/lingbot-va-piper/client",
+    "python_paths": [
+      "/opt/ros/noetic/lib/python3/dist-packages"
+    ],
+    "environment": {
+      "ROS_MASTER_URI": "http://localhost:11311"
+    },
+    "log_dir": "/home/agilex/steward/steward/var/wam",
+    "camera_width": 640,
+    "camera_height": 480,
+    "camera_fps": 30
   }
 }

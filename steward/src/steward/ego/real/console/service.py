@@ -192,6 +192,15 @@ class Console:
                 raise HttpError(409, '真机配置已切换或断开，请刷新后再查看 skill')
             return self.agent.chat.skills.detail(name)
 
+    def save_skill(self, name, text, previous, generation):
+        """Serialize disk edits against configuration changes and operator turn admission."""
+        with self.lifecycle, self.lock:
+            if self.phase != 'connected' or self.agent is None or generation != self.generation:
+                raise HttpError(409, '真机配置已切换或断开，请刷新后再保存 skill')
+            result = self.agent.chat.save_skill(name, text, previous)
+            self.emit('INFO', 'skill', '已保存 skill：' + name, {'revision': result['revision']})
+            return result
+
     def stop_agent(self):
         """Cancel the operator turn and return the motion runtime's stop report."""
         with self.lifecycle:

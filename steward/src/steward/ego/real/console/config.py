@@ -83,6 +83,25 @@ def validate(value: dict) -> dict:
         raise ValueError('lift.motor_id 必须在 1–247 之间')
     if type(lift.get('serial_timeout_s')) not in (int, float) or not .05 <= lift['serial_timeout_s'] <= 1:
         raise ValueError('lift.serial_timeout_s 必须在 0.05–1 之间')
+    wam = value.get('wam')
+    if not isinstance(wam, dict) or wam.get('adapter') != 'cosmos-piper-v2':
+        raise ValueError('wam.adapter 必须为 cosmos-piper-v2')
+    for field in ('host', 'python', 'cosmos_repo', 'piper_client_dir', 'log_dir'):
+        _text(wam.get(field), 'wam.' + field)
+    for field, high in [('port', 65535), ('camera_width', 4096), ('camera_height', 4096), ('camera_fps', 60)]:
+        if type(wam.get(field)) is not int or not 1 <= wam[field] <= high:
+            raise ValueError('wam.' + field + ' 必须为有效正整数')
+    if not isinstance(wam.get('python_paths', []), list) or any(
+            not isinstance(path, str) or not path for path in wam.get('python_paths', [])):
+        raise ValueError('wam.python_paths 必须是路径列表')
+    if not isinstance(wam.get('environment', {}), dict) or any(
+            not isinstance(k, str) or not isinstance(v, str) for k, v in wam.get('environment', {}).items()):
+        raise ValueError('wam.environment 必须是字符串字典')
+    devices = {arm['id']: arm['device'] for arm in arms}
+    if not {'left', 'right'} <= devices.keys() or devices['left'] == devices['right']:
+        raise ValueError('WAM 和双臂归零需要不同的 left/right CAN 设备')
+    if not {'head', 'left_wrist', 'right_wrist'} <= seen:
+        raise ValueError('WAM 需要 head、left_wrist 和 right_wrist 相机')
     for field, low, high in [('refresh_fps', 1, 30), ('health_interval_s', .2, 60),
                              ('request_timeout_s', .1, 10), ('stale_after_s', 1, 120)]:
         number = value.get(field)

@@ -42,6 +42,12 @@ def make_server(console: Console, port: int = 8400, host: str = '0.0.0.0') -> Js
             raise HttpError(400, '新建会话需要当前配置 generation')
         return console.new_session(body['generation'])
 
+    def save_skill(query, body):
+        if (not isinstance(body, dict) or type(body.get('generation')) is not int
+                or not isinstance(body.get('name'), str)):
+            raise HttpError(400, '保存 skill 需要名称和当前配置 generation')
+        return console.save_skill(body['name'], body.get('text'), body.get('previous'), body['generation'])
+
     def asset(name, media):
         return lambda q, b: Binary((STATIC / name).read_bytes(), media, {'Cache-Control': 'no-store'})
 
@@ -54,6 +60,7 @@ def make_server(console: Console, port: int = 8400, host: str = '0.0.0.0') -> Js
         ('GET', '/api/configs'): lambda q, b: {'configs': list(console.configs.values())},
         ('GET', '/api/state'): lambda q, b: console.state(number(q, 'since')),
         ('GET', '/api/skill'): lambda q, b: console.skill_detail(q.get('name', ''), number(q, 'generation')),
+        ('POST', '/api/skill'): save_skill,
         ('POST', '/api/connect'): load,
         ('POST', '/api/disconnect'): lambda q, b: console.unload(),
         ('GET', '/api/camera/frame'): frame,

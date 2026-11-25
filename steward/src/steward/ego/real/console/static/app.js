@@ -6,6 +6,8 @@ for (const node of document.querySelectorAll('[data-placeholder]')) node.placeho
 for (const node of document.querySelectorAll('[data-label]')) node.setAttribute('aria-label', t(node.dataset.label));
 let profiles = [], state = null, cursor = 0, events = [], cameras = new Map(), generation = -1, busy = false, stopped = false;
 let contextBase = null, contextDirty = false, contextSaving = false;
+let skillGeneration = -1;
+const skillEditors = new Map();
 const levels = {DEBUG: 0, INFO: 1, WARNING: 2, ERROR: 3};
 const time = value => new Date(value * 1000).toLocaleTimeString('zh-CN', {hour12: false});
 function el(tag, className, text) { const n = document.createElement(tag); n.className = className; if (text !== undefined) n.textContent = text; return n; }
@@ -39,8 +41,6 @@ function resetCameras(config) {
 function drawDevices(s) {
   const rows = [...s.devices];
   if (!rows.length && selected()) for (const arm of selected().arms) rows.push({...arm, address: arm.device, status: 'unknown', detail: t('loadFirst')});
-  rows.push({name: t('runtime'), address: s.config?.runtime_url || selected()?.runtime_url || '', status: s.runtime ? 'reachable' : s.runtime_error ? 'unavailable' : 'unknown', detail: s.runtime ? `${t(s.runtime.mode)} · ${t('runtimeHint')}` : (s.runtime_error ? t('runtimeUnavailable') : t('runtimeUnknown'))});
-  rows.push({name: t('agent'), address: 'DeepSeek Flash · ' + t('nativeTools'), status: s.agent.connected ? 'available' : 'notRegistered', detail: s.agent.reason || t('agentDetail')});
   $('devices').replaceChildren(...rows.map(row => {
     const n = el('div', 'device'), head = el('div', 'device-head', row.name);
     head.append(el('span', `pill ${['available','reachable'].includes(row.status) ? 'good' : row.status === 'unavailable' ? 'bad' : ''}`, t(row.status)));
@@ -58,6 +58,7 @@ function resultSummary(result, status) {
   if (status === 'failed' && typeof result === 'string') return result.split('\n')[0];
   if (result && typeof result === 'object') {
     if (result.error) return String(result.error);
+    if (result.state === 'succeeded' && result.task_success === 'unknown') return t('executionUnverified');
     if (result.state === 'succeeded') return t('succeeded');
     if (result.state === 'failed') return t('failed');
     if (result.fault) return t('stateHasFault');
@@ -89,7 +90,7 @@ function renderTools(agent) {
   if (container.dataset.tools === signature) return;
   container.dataset.tools = signature;
   $('tool-count').textContent = names.length;
-  const labels = {navigate_to_pose: ['toolNavigate', 'toolNavigateDetail'], lift_move: ['toolLift', 'toolLiftDetail'],
+  const labels = {wam_operate: ['toolWam', 'toolWamDetail'], arms_zero: ['toolArmsZero', 'toolArmsZeroDetail'], navigate_to_pose: ['toolNavigate', 'toolNavigateDetail'], lift_move: ['toolLift', 'toolLiftDetail'],
     clear_motion_fault: ['toolClearFault', 'toolClearFaultDetail'], get_navigation_state: ['toolNavigationState', 'toolNavigationStateDetail']};
   container.replaceChildren(...names.map(name => {
     const label = labels[name], row = el('article', 'device tool-card'), heading = el('div', 'device-head', label ? t(label[0]) : name);
@@ -120,30 +121,83 @@ function renderAgentContext(agent) {
 }
 function renderSkills(agent) {
   const entries = agent.skills || [], container = $('supported-skills'), current = state.generation;
-  const signature = JSON.stringify([current, entries]);
-  if (container.dataset.skills === signature) return;
-  container.dataset.skills = signature;
+  if (skillGeneration !== current) {
+    skillGeneration = current; skillEditors.clear(); container.replaceChildren();
+  }
   $('skill-count').textContent = entries.length;
-  container.replaceChildren(...entries.map(skill => {
-    const row = el('details', 'device skill-card'), heading = el('summary', '', skill.name);
-    const text = el('pre', 'skill-text', t('skillLoading'));
-    row.append(heading, el('p', 'device-detail', skill.description), text);
-    let loaded = false, loading = false;
-    row.addEventListener('toggle', async () => {
-      if (!row.open || loaded || loading) return;
-      loading = true; text.textContent = t('skillLoading');
-      try {
-        const detail = await api('/api/skill?' + new URLSearchParams({name: skill.name, generation: current}));
-        if (state.generation !== current || !row.isConnected) return;
-        text.textContent = detail.text; loaded = true;
-      } catch (err) {
-        text.textContent = t('skillLoadFailed') + ': ' + err.message;
-      } finally { loading = false; }
-    });
-    return row;
-  }));
-  if (!entries.length) container.append(el('p', 'muted', t('skillsEmpty')));
+  for (const [name, view] of skillEditors) if (!entries.some(skill => skill.name === name)) {
+    view.row.remove(); skillEditors.delete(name);
+  }
+  container.querySelector('.skills-empty')?.remove();
+  for (const skill of entries) {
+    let view = skillEditors.get(skill.name);
+    if (!view) {
+      const row = el('details', 'device skill-card'), heading = el('summary', '', skill.name);
+      const description = el('p', 'device-detail', skill.description);
+      const editor = el('textarea', 'skill-editor');
+      editor.setAttribute('aria-label', skill.name + ' · ' + t('skillEditor'));
+      editor.spellcheck = false; editor.maxLength = 64000;
+      const save = el('button', '', t('skillSave')), reload = el('button', '', t('skillReload'));
+      save.type = reload.type = 'button';
+      const controls = el('div', 'context-actions'); controls.append(save, reload);
+      const status = el('p', 'device-detail'), problem = el('p', 'error skill-error');
+      problem.hidden = true; status.setAttribute('role', 'status'); problem.setAttribute('role', 'alert');
+      row.append(heading, description, editor, controls, status, problem);
+      view = {row, description, editor, save, reload, status, problem,
+        loaded: false, loading: false, saving: false, base: '', revision: null, currentRevision: skill.revision};
+      skillEditors.set(skill.name, view); container.append(row);
+      const currentView = view;
+      const valid = () => state.generation === current && row.isConnected;
+      const accept = detail => {
+        editor.value = detail.text; currentView.base = detail.text;
+        currentView.revision = detail.revision; currentView.currentRevision = detail.revision;
+        currentView.loaded = true; description.textContent = detail.description;
+      };
+      const load = async () => {
+        if (currentView.loading || currentView.saving) return;
+        currentView.loading = true; problem.hidden = true; updateSkillEditor(currentView);
+        try {
+          const detail = await api('/api/skill?' + new URLSearchParams({name: skill.name, generation: current}));
+          if (valid()) accept(detail);
+        } catch (err) {
+          if (valid()) { problem.textContent = err.message; problem.hidden = false; }
+        } finally { currentView.loading = false; if (valid()) updateSkillEditor(currentView); }
+      };
+      row.addEventListener('toggle', () => { if (row.open && !currentView.loaded) load(); });
+      editor.oninput = () => { problem.hidden = true; updateSkillEditor(currentView); };
+      reload.onclick = load;
+      save.onclick = async () => {
+        currentView.saving = true; problem.hidden = true; updateSkillEditor(currentView);
+        try {
+          const detail = await api('/api/skill', {name: skill.name, generation: current,
+            text: editor.value, previous: currentView.base});
+          if (valid()) {
+            accept(detail);
+            const metadata = state.agent.skills.find(entry => entry.name === skill.name);
+            if (metadata) Object.assign(metadata, {revision: detail.revision, description: detail.description});
+          }
+        } catch (err) {
+          if (valid()) { problem.textContent = err.message; problem.hidden = false; }
+        } finally { currentView.saving = false; if (valid()) updateSkillEditor(currentView); }
+      };
+    }
+    view.currentRevision = skill.revision;
+    view.description.textContent = skill.description;
+    updateSkillEditor(view);
+  }
+  if (!entries.length) container.append(el('p', 'muted skills-empty', t('skillsEmpty')));
 }
+function updateSkillEditor(view) {
+  const dirty = view.loaded && view.editor.value !== view.base;
+  const conflict = view.loaded && view.revision !== view.currentRevision;
+  const blocked = busy || state.agent.busy || state.phase !== 'connected';
+  view.editor.disabled = blocked || !view.loaded || view.loading || view.saving;
+  view.save.disabled = blocked || !dirty || conflict || view.loading || view.saving;
+  view.reload.disabled = view.loading || view.saving;
+  view.status.textContent = t(view.saving ? 'skillSaving' : view.loading || !view.loaded ? 'skillLoading'
+    : state.agent.busy ? 'skillBusy' : conflict ? 'skillConflict' : dirty ? 'skillDirty' : 'skillSaved');
+}
+
 const tabs = [...document.querySelectorAll('.agent-tabs [role="tab"]')];
 function activateTab(tab) {
   $('new-session').hidden = tab.id !== 'tab-conversation';

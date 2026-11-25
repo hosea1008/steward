@@ -16,6 +16,7 @@ test('motion tools use a substitute Ego service and release their registrations'
     summary: record('summary'), stop: record('stop'),
     motion: { navigateToPose: record('navigate'), moveLift: record('lift'), clearFault: record('clear') },
     navigation: { readState: record('navigation-state') },
+    manipulation: { operateWam: record('wam'), zeroArms: record('zero') },
   })
   ctx.provide('tools', { register(tool) {
     definitions.set(tool.name, tool)
@@ -23,12 +24,14 @@ test('motion tools use a substitute Ego service and release their registrations'
   } })
   try {
     await ctx.plugin(motionTools)
-    assert.deepEqual([...definitions.keys()].sort(), ['body_stop', 'clear_motion_fault', 'ego_state', 'get_navigation_state', 'lift_move', 'navigate_to_pose'])
+    assert.deepEqual([...definitions.keys()].sort(), ['arms_zero', 'body_stop', 'clear_motion_fault', 'ego_state', 'get_navigation_state', 'lift_move', 'navigate_to_pose', 'wam_operate'])
     const nav = { x: 1, y: 2, heading_deg: 90, map_name: 'fixture', timeout_s: 20,
       position_tolerance_m: .05, heading_tolerance_deg: 2 }
     const lift = { action: 'home', timeout_s: 10 }
+    const wam = { prompt: 'fixture task', max_chunks: 2, timeout_s: 30 }
+    const zero = { open_grippers: false, timeout_s: 30 }
     const clear = { fault_id: 'fixture-fault', operator_confirmed_stopped: true, reason: 'operator inspected' }
-    for (const [name, args] of [['ego_state', {}], ['get_navigation_state', { timeout_s: 5 }], ['navigate_to_pose', nav], ['lift_move', lift], ['clear_motion_fault', clear], ['body_stop', {}]]) {
+    for (const [name, args] of [['ego_state', {}], ['get_navigation_state', { timeout_s: 5 }], ['navigate_to_pose', nav], ['lift_move', lift], ['clear_motion_fault', clear], ['wam_operate', wam], ['arms_zero', zero], ['body_stop', {}]]) {
       assert.deepEqual(await definitions.get(name).execute(args, { signal: controller.signal }), { state: 'succeeded' })
     }
     assert.deepEqual(calls, [
@@ -37,6 +40,8 @@ test('motion tools use a substitute Ego service and release their registrations'
       { name: 'navigate', args: [nav, controller.signal] },
       { name: 'lift', args: [lift, controller.signal] },
       { name: 'clear', args: [clear, controller.signal] },
+      { name: 'wam', args: [wam, controller.signal] },
+      { name: 'zero', args: [zero, controller.signal] },
       { name: 'stop', args: [controller.signal] },
     ])
   } finally { await ctx.fiber.dispose() }
@@ -117,4 +122,11 @@ test('motion provider rejects invalid connection configuration before publishing
       assert.equal(ctx.ego, undefined)
     } finally { await ctx.fiber.dispose() }
   }
+})
+
+test('missing manipulation fails before any tools are registered', () => {
+  let registered = false
+  assert.throws(() => motionTools.apply({ ego: { motion: {}, navigation: {} },
+    effect() { registered = true }, tools: {} }), /manipulation support/)
+  assert.equal(registered, false)
 })

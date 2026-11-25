@@ -59,6 +59,51 @@ export interface ClearMotionFaultRequest {
   reason: string
 }
 
+/** Finite prompt-driven operation. Optional tuning is resolved by the real runtime. */
+export interface WamOperateRequest {
+  prompt: string
+  max_chunks: number
+  timeout_s: number
+  control_mode?: 'movej' | 'movejs'
+  action_dt?: number
+  model_fps?: number
+  wait_tol_deg?: number
+  smooth_method?: 'none' | 'spline' | 'savgol' | 'butter'
+  smooth_factor?: number
+  v_max?: number
+  outlier_threshold?: number
+  savgol_window?: number
+  savgol_order?: number
+  butter_cutoff?: number
+  left_gripper_scale?: number
+  right_gripper_scale?: number
+  gripper_close_threshold?: number
+  save_prediction_video?: boolean
+  expected_execute_steps?: number
+}
+
+/** Joint zero may release held objects only when explicitly requested. */
+export interface ArmsZeroRequest {
+  timeout_s: number
+  open_grippers: boolean
+}
+
+/** Optional real-arm capability, independent of simulated skills and prediction receipts. */
+export interface EgoManipulation {
+  /** Execute the supplied prompt with a finite budget; never automatically zero or retry.
+   * @param request - prompt, chunk budget, deadline and optional client tuning.
+   * @param signal - cancellation propagated to the runtime and arm worker.
+   * @returns execution outcome; chunk completion does not establish task success.
+   */
+  operateWam(request: WamOperateRequest, signal?: AbortSignal): Promise<JsonObject>
+  /** Move both arms to joint zero, optionally opening grippers to their queried limits.
+   * @param request - deadline and explicit gripper-opening choice.
+   * @param signal - cancellation; physical rest still needs confirmation after failure.
+   * @returns fresh measured arrival or failure with stop evidence.
+   */
+  zeroArms(request: ArmsZeroRequest, signal?: AbortSignal): Promise<JsonObject>
+}
+
 /** Read-only navigation telemetry; independent of permission to move the robot. */
 export interface EgoNavigation {
   /** Subscribe to current controller pose and navigation status without sending motion commands.
@@ -332,6 +377,8 @@ export abstract class EgoService extends Service {
   readonly motion?: EgoMotion
   /** Present only when the provider supports read-only navigation telemetry. */
   readonly navigation?: EgoNavigation
+  /** Present only when the provider supports real-arm execution. */
+  readonly manipulation?: EgoManipulation
 
   constructor(ctx: Context) {
     super(ctx, 'ego')

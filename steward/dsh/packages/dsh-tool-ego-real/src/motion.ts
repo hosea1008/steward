@@ -23,6 +23,8 @@ export function apply(ctx: Context): void {
   if (!motion) throw new Error('motion tools require a ctx.ego provider with parameterized motion support')
   const navigation = ego.navigation
   if (!navigation) throw new Error('real console tools require a ctx.ego provider with navigation telemetry support')
+  const manipulation = ego.manipulation
+  if (!manipulation) throw new Error('real console tools require a ctx.ego provider with manipulation support')
   ctx.effect(() => ctx.tools.register(defineTool({
     name: 'get_navigation_state',
     description: 'Read current chassis navigation feedback from the device, unlike cached ego_state. Returns absolute map x/y in meters, heading_deg from map +X, map name, localization validity, scheduler and navigation status, task identity and progress. Read-only: no movement, stop, reset or fault clearance. Available with a software fault or motion disabled. Require state=succeeded and pose_valid=true before using coordinates; reading successfully does not prove physical rest or navigation success. Receive timestamps are host times; the two topics are not an atomic sensor snapshot.',
@@ -63,6 +65,39 @@ export function apply(ctx: Context): void {
       operator_confirmed_stopped: { type: 'boolean', required: true, description: 'Must be true only when the operator has explicitly confirmed physical rest and inspection for this fault.' },
       reason: { type: 'string', required: true, description: 'Operator-provided inspection/recovery reason, 1–1000 characters; not a claim of sensor verification.' },
     }, output, execute: async (args, exec) => json(await motion.clearFault(args, exec.signal)),
+  })))
+  ctx.effect(() => ctx.tools.register(defineTool({
+    name: 'wam_operate',
+    description: 'Execute a prompt on the real dual-arm Cosmos WAM using live robot cameras. Load the applicable operation skill for material prompts and chunk budgets. Requires the chassis already stopped at the operation pose and a clear workspace. Fixed arm speed 25%; no navigation, lift, automatic zero, task classification or retries. state=succeeded means the finite chunk budget ran, NOT that grasp/place succeeded; task_success remains unknown. Inspect feedback and obtain operator confirmation before dependent release/zero if task success is unverified. Unknown outcomes latch a fault.',
+    parameters: {
+      prompt: { type: 'string', required: true, description: 'Exact operation instruction, 1–10000 characters; obtain material-specific text from a skill.' },
+      max_chunks: { type: 'integer', required: true, description: 'Finite number of server inference chunks, 1–1000; use skill or explicit operator value. No unlimited execution.' },
+      timeout_s: { type: 'number', required: true, description: 'Whole operation deadline, 0.1–600 seconds, including startup and inference.' },
+      control_mode: { type: 'string', enum: ['movej', 'movejs'], description: 'Joint controller mode; default movej. Speed remains fixed.' },
+      action_dt: { type: 'number', description: 'Controller step seconds, 0.01–0.2; default 0.02.' },
+      model_fps: { type: 'number', description: 'Expected server FPS, 1–60; default 30. Mismatch fails before arm enable.' },
+      expected_execute_steps: { type: 'integer', description: 'Optional required server execute_steps, 1–10000; mismatch fails before arm enable.' },
+      wait_tol_deg: { type: 'number', description: 'Joint arrival diagnostic tolerance, 0.1–5 degrees; default 3.' },
+      smooth_method: { type: 'string', enum: ['none', 'spline', 'savgol', 'butter'], description: 'Trajectory smoothing; default spline.' },
+      smooth_factor: { type: 'number', description: 'Spline smoothing factor, 0–1; default 0.1.' },
+      v_max: { type: 'number', description: 'Smoother joint velocity limit in rad/s, 0.01–3; default 3, does not override fixed motor speed.' },
+      outlier_threshold: { type: 'number', description: 'Trajectory outlier threshold, 0.1–30 degrees; default 10.' },
+      savgol_window: { type: 'integer', description: 'Odd filter window, 3–101; default 11, greater than savgol_order.' },
+      savgol_order: { type: 'integer', description: 'Filter polynomial order, 1–10; default 2.' },
+      butter_cutoff: { type: 'number', description: 'Butterworth cutoff Hz, 0.01–40 and below half controller frequency; default 5.' },
+      left_gripper_scale: { type: 'number', description: 'Left gripper width scale, 0–1; default 1.' },
+      right_gripper_scale: { type: 'number', description: 'Right gripper width scale, 0–1; default 1.' },
+      gripper_close_threshold: { type: 'number', description: 'Width at or below which to close, 0–0.08 meters; default 0.02.' },
+      save_prediction_video: { type: 'boolean', description: 'Request and save model prediction video after execution; default false. Uses remaining timeout.' },
+    }, output, execute: async (args, exec) => json(await manipulation.operateWam(args, exec.signal)),
+  })))
+  ctx.effect(() => ctx.tools.register(defineTool({
+    name: 'arms_zero',
+    description: 'Move both real Piper arms to zero joint angles at fixed 10% speed. open_grippers=true also opens both grippers to device-reported maximum travel and RELEASES held objects; false leaves gripper targets unchanged. Require clearance for the full motion. No lift movement or automatic hardware fault reset. Success requires five fresh samples within 1 degree and, when opening, 1 mm. Failure/cancellation attempts electronic stop and latches a fault; software fault clearance does not reset device emergency stop.',
+    parameters: {
+      timeout_s: { type: 'number', required: true, description: 'Whole operation timeout, 0.1–600 seconds; normally 30 seconds.' },
+      open_grippers: { type: 'boolean', required: true, description: 'Explicit choice: true opens and releases held objects; false preserves current gripper targets.' },
+    }, output, execute: async (args, exec) => json(await manipulation.zeroArms(args, exec.signal)),
   })))
   ctx.effect(() => ctx.tools.register(defineTool({
     name: 'body_stop', description: 'Cancel this turn’s motion and wait for feedback. Inspect fault and stop acknowledgement; requesting stop does not establish physical rest. No further motion is admitted in this turn.',

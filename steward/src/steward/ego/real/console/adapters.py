@@ -49,6 +49,17 @@ def boot_cobot_magic(config: dict, emit) -> list[dict]:
         item = dict(id=key, name=label, address=address, status=status, detail=detail)
         devices.append(item)
         emit('DEBUG' if status == 'reachable' else 'WARNING', 'device', label + '：' + detail, item)
+    wam = config['wam']
+    try:
+        with socket.create_connection((wam['host'], wam['port']), timeout=config['request_timeout_s']):
+            pass
+        status, detail = 'reachable', '端口可达；调用时校验 Cosmos 协议，未推理或使能机械臂'
+    except OSError as exc:
+        status, detail = 'unavailable', str(exc)
+    item = dict(id='cosmos-wam', name='Cosmos WAM', address=f"ws://{wam['host']}:{wam['port']}",
+                status=status, detail=detail)
+    devices.append(item)
+    emit('DEBUG' if status == 'reachable' else 'WARNING', 'device', 'Cosmos WAM：' + detail, item)
     return devices
 
 

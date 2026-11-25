@@ -456,7 +456,8 @@ pre {
 .skill-list { display:grid; gap:8px; min-width:0; }
 .skill-card { min-width:0; }
 .skill-card summary { font-weight:600; }
-.skill-text { max-height:420px; overflow:auto; padding:10px; background:var(--inset); border-radius:6px; }
+.skill-editor { display:block; width:100%; min-width:0; height:320px; resize:vertical; padding:10px; margin:8px 0; background:var(--inset); border-radius:6px; font:12px/1.6 monospace; }
+.skill-error { white-space:pre-wrap; overflow-wrap:anywhere; }
 .messages {
   flex:1;
   min-height:180px;

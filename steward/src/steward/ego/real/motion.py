@@ -14,12 +14,16 @@ import time
 from steward.net import CancellableHandler, HttpError, JsonServer
 from .drivers.navigation import Navigation, NavigationError, LINEAR_SPEED_M_S, ANGULAR_SPEED_RAD_S
 from .drivers.lift import LiftController, LiftError
+from .drivers.manipulation import ArmWorker, WAM_SPEED_PERCENT, resolve as resolve_manipulation
+from .drivers.arm_zero import ZERO_SPEED_PERCENT
 
 
 def validate_arguments(tool, args):
     """Validate model JSON before opening any hardware transport; never accept speed overrides."""
     if not isinstance(args, dict):
         raise HttpError(400, '工具参数必须为对象')
+    if tool in ('wam_operate', 'arms_zero'):
+        return resolve_manipulation(tool, args)
     fields = ({'x', 'y', 'heading_deg', 'map_name', 'timeout_s', 'position_tolerance_m', 'heading_tolerance_deg'}
               if tool == 'navigate_to_pose' else {'action', 'height_mm', 'timeout_s'})
     if tool not in ('navigate_to_pose', 'lift_move') or args.keys() - fields:
@@ -51,9 +55,10 @@ def validate_arguments(tool, args):
 class Motion:
     """Serialize both actuators and retain uncertain outcomes in visible state."""
 
-    def __init__(self, config, emit, *, enabled=True, navigation_factory=Navigation, lift_factory=LiftController):
+    def __init__(self, config, emit, *, enabled=True, navigation_factory=Navigation, lift_factory=LiftController, arm_factory=ArmWorker):
         self.config, self.emit, self.enabled = config, emit, enabled
         self.navigation_factory, self.lift_factory = navigation_factory, lift_factory
+        self.arm_factory = arm_factory
         self.token = secrets.token_urlsafe(32)
         self.lock = threading.RLock()
         self.cancel = threading.Event()
@@ -90,8 +95,9 @@ class Motion:
                     'fault_id': self.fault_id, 'last_fault_clear': self.last_fault_clear,
                     'map_name': self.config['navigation']['map'],
                     'limits': {'linear_m_s': LINEAR_SPEED_M_S, 'angular_rad_s': ANGULAR_SPEED_RAD_S,
+                               'wam_arm_percent': WAM_SPEED_PERCENT, 'zero_arm_percent': ZERO_SPEED_PERCENT,
                                'lift_rpm': LiftController.MOTOR_RPM, 'lift_height_mm': [0, 750]},
-                    'tools': ['navigate_to_pose', 'lift_move', 'clear_motion_fault', 'get_navigation_state'],
+                    'tools': ['navigate_to_pose', 'lift_move', 'clear_motion_fault', 'get_navigation_state', 'wam_operate', 'arms_zero'],
                     'lift_home': 'explicit; encoder origin must be established after each motor power cycle'}
 
     def _latch_fault(self, fault):
@@ -197,6 +203,9 @@ class Motion:
             if tool == 'navigate_to_pose':
                 driver = self.navigation_factory(self.config['navigation'], cancelled)
                 result = driver.navigate(args)
+            elif tool in ('wam_operate', 'arms_zero'):
+                driver = self.arm_factory(self.config, cancelled)
+                result = driver.execute(tool, args)
             else:
                 cfg = self.config['lift']
                 driver = self.lift_factory(cfg['port'], motor_id=cfg['motor_id'],
@@ -211,7 +220,7 @@ class Motion:
             if driver is not None:
                 try:
                     acknowledgement = driver.stop()
-                    result['stop'] = acknowledgement if tool == 'navigate_to_pose' else {
+                    result['stop'] = acknowledgement if tool != 'lift_move' else {
                         'requested': True, 'write_acknowledged': True,
                         'physical_stop_confirmed': acknowledgement['speed_rpm'] == 0,
                         'feedback': acknowledgement}

@@ -1,7 +1,7 @@
 /** Console Motion HTTP adapter for ctx.ego; registering a provider does not register model tools. */
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
-import type { EgoMotion, EgoNavigation, JsonObject } from '@steward/dsh-ego'
+import type { EgoManipulation, EgoMotion, EgoNavigation, JsonObject } from '@steward/dsh-ego'
 import { EgoRuntimeClient, type Config as EgoClientConfig } from '@steward/dsh-ego-runtime-client'
 import { baseUrl, requestJson } from '@steward/http-json'
 
@@ -28,6 +28,7 @@ export function apply(ctx: Context, config: Config): void {
  * The console profile loads only motion tools; other Ego HTTP methods are not supported by Motion.
  */
 class MotionClient extends EgoRuntimeClient {
+  readonly manipulation: EgoManipulation
   readonly motion: EgoMotion
   readonly navigation: EgoNavigation
   private readonly endpoint: string
@@ -43,6 +44,10 @@ class MotionClient extends EgoRuntimeClient {
     this.token = config.token
     this.navigation = {
       readState: (request, signal) => this.request('/navigation-state', { arguments: request }, signal),
+    }
+    this.manipulation = {
+      operateWam: (request, signal) => this.request('/execute', { tool: 'wam_operate', arguments: request }, signal),
+      zeroArms: (request, signal) => this.request('/execute', { tool: 'arms_zero', arguments: request }, signal),
     }
     this.motion = {
       navigateToPose: (request, signal) => this.request('/execute', { tool: 'navigate_to_pose', arguments: request }, signal),
