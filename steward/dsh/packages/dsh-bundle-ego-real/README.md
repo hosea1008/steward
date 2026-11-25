@@ -31,6 +31,6 @@ STEWARD_TEST_REAL_SKILL=1 STEWARD_PYTHON=python3 node --test steward/dsh/test/eg
 
 评估覆盖正负 Y 方向、同 X、同位置但需朝向调整、首段失败、定位无效和仅规划任务。通过这些检查不等于已经完成真机路径验收。
 
-[factory-wam-operation](skills/factory-wam-operation/SKILL.md) 保存三个物料的采集及袋装纸盒、袋装蓝线归还的精确 prompt 与 chunk 预算，并通过独立 `arms_zero` 工具处理确认归还成功后的归零。黑色盒子归还未支持。WAM 工具只执行通用参数，不包含任务识别；位置仍来自 task context。该目录同样由 Harness 摘要发现、`skill` 正文加载和控制台展示共用，无需另建注册表。
+[factory-wam-operation](skills/factory-wam-operation/SKILL.md) 保存三个物料的采集及袋装纸盒、袋装蓝线归还的精确 prompt 与 chunk 预算，并通过独立 `arms_zero` 工具处理归还操作成功返回后的归零。黑色盒子归还未支持。WAM 工具只执行通用参数，不包含任务识别；位置仍来自 task context。该目录同样由 Harness 摘要发现、`skill` 正文加载和控制台展示共用，无需另建注册表。
 
 控制台支持直接编辑并保存已有 skill 的完整文件。`SkillCatalog.save` 校验正文和 frontmatter、比较编辑基线与磁盘内容，并原子替换源文件；`RealChat.save_skill` 在任务锁内拒绝忙碌时修改。成功后下一轮重建原生技能目录快照，并在正常会话日志中写入技能版本更新提示，要求模型重新加载。文件名和 frontmatter 的 `name` 不允许通过网页重命名。新增文件或外部修改仍需重新连接配置；网页冲突和保存错误保留草稿供核对。

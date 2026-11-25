@@ -42,3 +42,7 @@ WAM 的成功结果只表示有限 chunk 执行结束，保留 `task_success=unk
 `move_for_duration` → `ctx.ego.motion.moveForDuration` → provider `/execute` → `Motion` → `drivers/timed_move.py`。驱动独立保存 NAVIS 虚拟摇杆协议，不导入或启动 `../NAVIS`。复用 `navigation.websocket_url`，不读取地图或物料位置，不发送导航任务、自动恢复或 HTTP 登录。与其他运动共用串行化、禁用运动检查、取消和故障锁。
 
 `direction` 与 `duration_s` 必填，`speed` 可选、默认 0.2、固定上限 0.5；校验由运行时在打开连接之前完成，不静默截断超限值。方向、单位和范围由工具参数描述送入模型，部署、使用限制及结果语义见控制台指南。修改默认速度或范围时同步运行时解析、工具描述、网页文案和行为测试；地图导航的固定 0.1 速度不受此工具影响。
+
+操作员明确指令作为现场观察后的执行授权；模型可直接调用已注册工具，不为普通动作重复索取安全确认。工具描述区分执行失败与缺少独立物理效果验证，后者不单独增加审批步骤。故障锁、参数校验、限速和取消语义仍由运行时执行，故障恢复不能伪造操作员的停稳检查事实。
+
+交互策略的真实模型回归可用 `STEWARD_TEST_DIRECT_COMMANDS=1 STEWARD_PYTHON=python3 node --test steward/dsh/test/ego-direct-commands-live.test.mjs`，需预先设置 `DEEPSEEK_API_KEY`。它只连接隔离的模拟机器人接口，覆盖明确移动、双臂归零、归还后继续归零、缺失时长及已有故障；普通指令中不额外加入“已安全”或“无需确认”等提示。

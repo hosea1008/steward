@@ -59,6 +59,8 @@ test('console native calls carry tool descriptions and the saved context on ever
       }
       const system = request.messages.filter(m => ['system', 'developer'].includes(m.role)).map(m => m.content).join('\n')
       assert.doesNotMatch(system, /run_code|编写可复用/)
+      assert.match(system, /不例行追问现场安全/)
+      assert.match(system, /仅在必要参数缺失/)
       assert.match(JSON.stringify(request.messages), /manhattan-navigation/)
       if (step === 7) assert.match(JSON.stringify(request.messages.filter(m => m.role === 'tool')), /黑色盒子归还未接入/)
       if (step === 1) {
