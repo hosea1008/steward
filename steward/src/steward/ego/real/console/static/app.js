@@ -58,6 +58,7 @@ function resultSummary(result, status) {
   if (status === 'failed' && typeof result === 'string') return result.split('\n')[0];
   if (result && typeof result === 'object') {
     if (result.error) return String(result.error);
+    if (result.state === 'succeeded' && result.command_stream_complete) return t('timedMoveUnverified');
     if (result.state === 'succeeded' && result.task_success === 'unknown') return t('executionUnverified');
     if (result.state === 'succeeded') return t('succeeded');
     if (result.state === 'failed') return t('failed');
@@ -90,7 +91,7 @@ function renderTools(agent) {
   if (container.dataset.tools === signature) return;
   container.dataset.tools = signature;
   $('tool-count').textContent = names.length;
-  const labels = {wam_operate: ['toolWam', 'toolWamDetail'], arms_zero: ['toolArmsZero', 'toolArmsZeroDetail'], navigate_to_pose: ['toolNavigate', 'toolNavigateDetail'], lift_move: ['toolLift', 'toolLiftDetail'],
+  const labels = {move_for_duration: ['toolTimedMove', 'toolTimedMoveDetail'], wam_operate: ['toolWam', 'toolWamDetail'], arms_zero: ['toolArmsZero', 'toolArmsZeroDetail'], navigate_to_pose: ['toolNavigate', 'toolNavigateDetail'], lift_move: ['toolLift', 'toolLiftDetail'],
     clear_motion_fault: ['toolClearFault', 'toolClearFaultDetail'], get_navigation_state: ['toolNavigationState', 'toolNavigationStateDetail']};
   container.replaceChildren(...names.map(name => {
     const label = labels[name], row = el('article', 'device tool-card'), heading = el('div', 'device-head', label ? t(label[0]) : name);

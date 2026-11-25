@@ -14,7 +14,7 @@ test('motion tools use a substitute Ego service and release their registrations'
   const record = name => async (...args) => { calls.push({ name, args }); return { state: 'succeeded' } }
   ctx.provide('ego', {
     summary: record('summary'), stop: record('stop'),
-    motion: { navigateToPose: record('navigate'), moveLift: record('lift'), clearFault: record('clear') },
+    motion: { moveForDuration: record('timed-move'), navigateToPose: record('navigate'), moveLift: record('lift'), clearFault: record('clear') },
     navigation: { readState: record('navigation-state') },
     manipulation: { operateWam: record('wam'), zeroArms: record('zero') },
   })
@@ -24,14 +24,15 @@ test('motion tools use a substitute Ego service and release their registrations'
   } })
   try {
     await ctx.plugin(motionTools)
-    assert.deepEqual([...definitions.keys()].sort(), ['arms_zero', 'body_stop', 'clear_motion_fault', 'ego_state', 'get_navigation_state', 'lift_move', 'navigate_to_pose', 'wam_operate'])
+    assert.deepEqual([...definitions.keys()].sort(), ['arms_zero', 'body_stop', 'clear_motion_fault', 'ego_state', 'get_navigation_state', 'lift_move', 'move_for_duration', 'navigate_to_pose', 'wam_operate'])
     const nav = { x: 1, y: 2, heading_deg: 90, map_name: 'fixture', timeout_s: 20,
       position_tolerance_m: .05, heading_tolerance_deg: 2 }
+    const timed = { direction: 'backward', speed: .3, duration_s: 2 }
     const lift = { action: 'home', timeout_s: 10 }
     const wam = { prompt: 'fixture task', max_chunks: 2, timeout_s: 30 }
     const zero = { open_grippers: false, timeout_s: 30 }
     const clear = { fault_id: 'fixture-fault', operator_confirmed_stopped: true, reason: 'operator inspected' }
-    for (const [name, args] of [['ego_state', {}], ['get_navigation_state', { timeout_s: 5 }], ['navigate_to_pose', nav], ['lift_move', lift], ['clear_motion_fault', clear], ['wam_operate', wam], ['arms_zero', zero], ['body_stop', {}]]) {
+    for (const [name, args] of [['ego_state', {}], ['get_navigation_state', { timeout_s: 5 }], ['navigate_to_pose', nav], ['lift_move', lift], ['move_for_duration', timed], ['clear_motion_fault', clear], ['wam_operate', wam], ['arms_zero', zero], ['body_stop', {}]]) {
       assert.deepEqual(await definitions.get(name).execute(args, { signal: controller.signal }), { state: 'succeeded' })
     }
     assert.deepEqual(calls, [
@@ -39,6 +40,7 @@ test('motion tools use a substitute Ego service and release their registrations'
       { name: 'navigation-state', args: [{ timeout_s: 5 }, controller.signal] },
       { name: 'navigate', args: [nav, controller.signal] },
       { name: 'lift', args: [lift, controller.signal] },
+      { name: 'timed-move', args: [timed, controller.signal] },
       { name: 'clear', args: [clear, controller.signal] },
       { name: 'wam', args: [wam, controller.signal] },
       { name: 'zero', args: [zero, controller.signal] },

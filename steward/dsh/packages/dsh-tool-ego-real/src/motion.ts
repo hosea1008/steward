@@ -49,6 +49,15 @@ export function apply(ctx: Context): void {
     }, output, execute: async (args, exec) => json(await motion.navigateToPose(args, exec.signal)),
   })))
   ctx.effect(() => ctx.tools.register(defineTool({
+    name: 'move_for_duration',
+    description: 'Move the real chassis in its own body frame for a finite duration via the NAVIS virtual joystick. forward/backward translate along X; turn_left/turn_right rotate about Z; shift_left/shift_right translate along Y and require a chassis that supports lateral motion. Speed is a positive magnitude: default 0.2, hard maximum 0.5; translation uses m/s and rotation rad/s. Requires operator-provided direction and duration, clear space and no concurrent external controller/navigation task. No map target, localization, path planning or guaranteed obstacle avoidance. Publishes at 10 Hz and sends zero on completion or cancellation. state=succeeded means command transmission completed, NOT measured distance, angle or physical rest; inspect stop evidence and confirm rest before dependent work. Never automatically retry an uncertain result.',
+    parameters: {
+      direction: { type: 'string', required: true, enum: ['forward', 'backward', 'turn_left', 'turn_right', 'shift_left', 'shift_right'], description: 'Direction relative to the chassis; lateral shifts require compatible hardware.' },
+      speed: { type: 'number', description: 'Positive magnitude, greater than 0 and at most 0.5. Default 0.2. m/s for translation, rad/s for turning; direction supplies the sign.' },
+      duration_s: { type: 'number', required: true, description: 'Movement-command duration after connection/heartbeat, 0.1–60 seconds. Does not imply a precise traveled distance or turn angle.' },
+    }, output, execute: async (args, exec) => json(await motion.moveForDuration(args, exec.signal)),
+  })))
+  ctx.effect(() => ctx.tools.register(defineTool({
     name: 'lift_move',
     description: 'Move the real lift. action=height sets an absolute integer height in mm (0–750); action=home moves DOWN to the physical limit and establishes zero, and must omit height_mm. Homing is explicit, never automatic. After motor power loss the operator must establish the origin with home before height moves. Fixed 400 RPM. Blocks; require state=succeeded before dependent work.',
     parameters: {

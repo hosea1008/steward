@@ -50,6 +50,7 @@ class MotionClient extends EgoRuntimeClient {
       zeroArms: (request, signal) => this.request('/execute', { tool: 'arms_zero', arguments: request }, signal),
     }
     this.motion = {
+      moveForDuration: (request, signal) => this.request('/execute', { tool: 'move_for_duration', arguments: request }, signal),
       navigateToPose: (request, signal) => this.request('/execute', { tool: 'navigate_to_pose', arguments: request }, signal),
       moveLift: (request, signal) => this.request('/execute', { tool: 'lift_move', arguments: request }, signal),
       clearFault: (request, signal) => this.request('/clear-fault', { arguments: request }, signal),

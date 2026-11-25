@@ -33,6 +33,7 @@ PYTHONPATH=steward/src steward/.venv/bin/python -m steward.ego.real.console --ke
 | --- | --- | --- |
 | `get_navigation_state` | `timeout_s`（必填，0.1–30 秒） | 只读获取底盘地图位置、朝向、定位有效性、两层导航状态、当前任务及进度 |
 | `navigate_to_pose` | `x`、`y`（地图米制坐标），`heading_deg`（相对地图 +X 的角度，−180 至 180），`map_name`，`timeout_s`，`position_tolerance_m`，`heading_tolerance_deg` | 单个地图目标位姿；固定线速度 0.1 m/s、角速度 0.1 rad/s，开启避障；不含物料坐标、固定路线或速度入参 |
+| `move_for_duration` | `direction`、`duration_s`；可选 `speed` | 底盘按自身坐标系定时移动；默认速度 0.2，上限 0.5，到时发送零速度 |
 | `lift_move` | `action: "height"`、`height_mm`（整数 0–750）、`timeout_s`；或者 `action: "home"`、`timeout_s` | 固定 400 RPM；height 是绝对高度；home 真实向下运行至限位并归零，不能带 height_mm；不会自动 home |
 | `wam_operate` | `prompt`、`max_chunks`、`timeout_s`，其他通用参数可选 | 执行 WAM 双臂动作，不自动归零；详见下方部署说明 |
 | `arms_zero` | `timeout_s`、`open_grippers` | 双臂关节归零；是否张开夹爪必须明确传入 |
@@ -96,3 +97,11 @@ Python 测试使用模拟驱动，DSH 录制测试使用独立 HTTP 模型与设
 执行桥接、子进程管理及归零算法均在 Steward 的 [drivers](../drivers) 内，不读取、导入或启动 `../agent`，也不读取其任务配置或 prompt。外部环境仍需安装设备与模型客户端库：当前 `wam.python` 为 `piper_new` 环境，提供 `piper_sdk`、`pyAgxArm`、ROS、OpenCV、NumPy、SciPy、msgpack 和 websockets 15+；`cosmos_repo` 指向已安装 Cosmos 客户端库，`piper_client_dir` 指向已验证的 Piper 相机/控制/平滑/记录库。迁移到另一台机器需要安装这些依赖并调整配置，不能只复制仓库后假设硬件 SDK 已存在。控制台 Python 与设备 worker Python 可以不同。
 
 每次调用保存到 `wam.log_dir` 下独立目录，包含请求、worker 日志、最终结果，以及 WAM SDK 生成的反馈、动作和视频记录。失败结果保留日志路径；超时或强制终止后物理状态未知，必须检查现场。WAM 执行完 chunk 不等于识别或验证物料操作成功，也不会自动归零；物料 prompt、预算和归还后归零顺序只在 `factory-wam-operation` skill 中维护。
+
+## 按方向、速度、时间移动底盘
+
+`move_for_duration` 支持 `forward`（前进）、`backward`（后退）、`turn_left`（左转）、`turn_right`（右转）、`shift_left` / `shift_right`（左右横移，需底盘硬件支持）。方向相对底盘自身，不是地图坐标轴。`speed` 为正数，省略时使用 **0.2**，硬上限 **0.5**；平移单位 m/s，转向单位 rad/s，超过上限直接拒绝。`duration_s` 范围 0.1–60 秒，从心跳握手成功后开始计时。例：`{"direction":"backward","speed":0.2,"duration_s":2}`；省略 speed 仍使用 0.2。现有 `navigate_to_pose` 的 0.1 m/s、0.1 rad/s 限速保持不变。
+
+调用前需确认通道和机械臂姿态允许移动、没有外部导航任务或其他控制器同时操作。工具通过 `/run_management/virtual_joy` 以 10 Hz 发送速度，保持心跳；它不规划路径、不校验地图目标，也不能承诺导航避障或精确位移。时间到或取消后发送零速度；取消、连接断开、心跳丢失和停止发送失败均保留故障，不自动重试。连接失败且尚未发送运动时不额外发送移动或停止指令。
+
+接口没有运动确认回执。`state=succeeded` / `command_stream_complete=true` 表示定时指令及零速度写入完成，`stop.write_acknowledged` 仅表示本地 socket 写入成功，`physical_stop_confirmed` 仍为 false；不能据此声称已移动准确距离、旋转准确角度或已停稳。网页结果摘要会直接显示“物理停稳尚未确认”，后续操作需结合现场或可靠反馈确认。驱动测试见 `steward/tests/test_real_timed_move.py`，全部使用模拟 socket，不移动真机。

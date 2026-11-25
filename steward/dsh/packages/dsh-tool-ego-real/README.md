@@ -1,6 +1,6 @@
 # Real robot tools
 
-The default export and `./provider` implement the workstation admission API used by the native `ego-real` profile. `./motion` registers `get_navigation_state`, `navigate_to_pose`, `lift_move`, `wam_operate`, `arms_zero`, `clear_motion_fault`, `ego_state` and `body_stop` for the real console's native overlay. The model calls existing tools directly; registrations use the normal guarded tool pipeline and are disposed with their plugin.
+The default export and `./provider` implement the workstation admission API used by the native `ego-real` profile. `./motion` registers `get_navigation_state`, `navigate_to_pose`, `move_for_duration`, `lift_move`, `wam_operate`, `arms_zero`, `clear_motion_fault`, `ego_state` and `body_stop` for the real console's native overlay. The model calls existing tools directly; registrations use the normal guarded tool pipeline and are disposed with their plugin.
 
 The console overlay loads `./motion-provider` as the `ctx.ego` provider and `./motion` as its tool consumer. Only the provider receives `endpoint`, a private `token`, and `timeoutMs`; the tool plugin has no connection configuration. The provider exposes the optional `EgoMotion`, `EgoNavigation` and `EgoManipulation` interfaces declared in `@steward/dsh-ego`, plus cached `summary` and turn-scoped `stop`. It reuses the Ego HTTP client base, but Motion does not implement the base client's other Ego API endpoints. The overlay disables the workstation provider and tools and does not load the simulation bundle. A provider registration alone exposes no model tools.
 
@@ -36,3 +36,9 @@ Task context is managed by the [console](../../../src/steward/ego/real/console/R
 `drivers/cosmos.py` 隔离 Cosmos v2 握手及执行桥接；后续更换 WAM 接口时在驱动层提供适配器，并同步配置校验与模拟协议测试，不把协议或凭据塞进模型工具。`drivers/arm_zero.py` 保存独立双臂归零算法。worker 共用 `/tmp/piper-real-robot.lock`，禁止同本机遵守该锁的其他 Piper 客户端同时控制；不承诺阻止忽略该锁的外部程序。
 
 WAM 的成功结果只表示有限 chunk 执行结束，保留 `task_success=unknown` 和 SDK 运动反馈。双臂归零则要求新鲜到位反馈。取消、超时和错误尝试双臂电子急停；任一连接/停止/清理失败均报告，不自动复位或重试。子进程 8 秒内未退出则强制终止，退出不代表设备停稳，Motion 保留故障。新增机械臂动作必须沿用此所有权与停止流程。
+
+## 底盘定时移动
+
+`move_for_duration` → `ctx.ego.motion.moveForDuration` → provider `/execute` → `Motion` → `drivers/timed_move.py`。驱动独立保存 NAVIS 虚拟摇杆协议，不导入或启动 `../NAVIS`。复用 `navigation.websocket_url`，不读取地图或物料位置，不发送导航任务、自动恢复或 HTTP 登录。与其他运动共用串行化、禁用运动检查、取消和故障锁。
+
+`direction` 与 `duration_s` 必填，`speed` 可选、默认 0.2、固定上限 0.5；校验由运行时在打开连接之前完成，不静默截断超限值。方向、单位和范围由工具参数描述送入模型，部署、使用限制及结果语义见控制台指南。修改默认速度或范围时同步运行时解析、工具描述、网页文案和行为测试；地图导航的固定 0.1 速度不受此工具影响。

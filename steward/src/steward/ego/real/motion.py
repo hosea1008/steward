@@ -16,12 +16,15 @@ from .drivers.navigation import Navigation, NavigationError, LINEAR_SPEED_M_S, A
 from .drivers.lift import LiftController, LiftError
 from .drivers.manipulation import ArmWorker, WAM_SPEED_PERCENT, resolve as resolve_manipulation
 from .drivers.arm_zero import ZERO_SPEED_PERCENT
+from .drivers.timed_move import TimedMove, TimedMoveError, DEFAULT_SPEED, MAX_SPEED, resolve as resolve_timed_move
 
 
 def validate_arguments(tool, args):
-    """Validate model JSON before opening any hardware transport; never accept speed overrides."""
+    """Validate model JSON before opening any hardware transport; enforce each tool’s speed policy."""
     if not isinstance(args, dict):
         raise HttpError(400, '工具参数必须为对象')
+    if tool == 'move_for_duration':
+        return resolve_timed_move(args)
     if tool in ('wam_operate', 'arms_zero'):
         return resolve_manipulation(tool, args)
     fields = ({'x', 'y', 'heading_deg', 'map_name', 'timeout_s', 'position_tolerance_m', 'heading_tolerance_deg'}
@@ -55,10 +58,11 @@ def validate_arguments(tool, args):
 class Motion:
     """Serialize both actuators and retain uncertain outcomes in visible state."""
 
-    def __init__(self, config, emit, *, enabled=True, navigation_factory=Navigation, lift_factory=LiftController, arm_factory=ArmWorker):
+    def __init__(self, config, emit, *, enabled=True, navigation_factory=Navigation, lift_factory=LiftController, arm_factory=ArmWorker, timed_move_factory=TimedMove):
         self.config, self.emit, self.enabled = config, emit, enabled
         self.navigation_factory, self.lift_factory = navigation_factory, lift_factory
         self.arm_factory = arm_factory
+        self.timed_move_factory = timed_move_factory
         self.token = secrets.token_urlsafe(32)
         self.lock = threading.RLock()
         self.cancel = threading.Event()
@@ -95,9 +99,10 @@ class Motion:
                     'fault_id': self.fault_id, 'last_fault_clear': self.last_fault_clear,
                     'map_name': self.config['navigation']['map'],
                     'limits': {'linear_m_s': LINEAR_SPEED_M_S, 'angular_rad_s': ANGULAR_SPEED_RAD_S,
+                               'timed_move_default_speed': DEFAULT_SPEED, 'timed_move_max_speed': MAX_SPEED,
                                'wam_arm_percent': WAM_SPEED_PERCENT, 'zero_arm_percent': ZERO_SPEED_PERCENT,
                                'lift_rpm': LiftController.MOTOR_RPM, 'lift_height_mm': [0, 750]},
-                    'tools': ['navigate_to_pose', 'lift_move', 'clear_motion_fault', 'get_navigation_state', 'wam_operate', 'arms_zero'],
+                    'tools': ['navigate_to_pose', 'lift_move', 'clear_motion_fault', 'get_navigation_state', 'wam_operate', 'arms_zero', 'move_for_duration'],
                     'lift_home': 'explicit; encoder origin must be established after each motor power cycle'}
 
     def _latch_fault(self, fault):
@@ -203,6 +208,9 @@ class Motion:
             if tool == 'navigate_to_pose':
                 driver = self.navigation_factory(self.config['navigation'], cancelled)
                 result = driver.navigate(args)
+            elif tool == 'move_for_duration':
+                driver = self.timed_move_factory(self.config['navigation'], cancelled)
+                result = driver.move(args)
             elif tool in ('wam_operate', 'arms_zero'):
                 driver = self.arm_factory(self.config, cancelled)
                 result = driver.execute(tool, args)
@@ -215,7 +223,7 @@ class Motion:
                 result = {'state': 'succeeded', 'action': args['action'], 'feedback': state}
         except Exception as exc:
             result = {'state': 'failed', 'error': str(exc), 'physical_result': 'unknown'}
-            if isinstance(exc, (LiftError, NavigationError)) and exc.feedback is not None:
+            if isinstance(exc, (LiftError, NavigationError, TimedMoveError)) and exc.feedback is not None:
                 result['feedback'] = exc.feedback
             if driver is not None:
                 try:
@@ -226,7 +234,7 @@ class Motion:
                         'feedback': acknowledgement}
                 except Exception as stop_error:
                     result['stop'] = {'error': str(stop_error), 'physical_stop_confirmed': False}
-                    if isinstance(stop_error, (LiftError, NavigationError)) and stop_error.feedback is not None:
+                    if isinstance(stop_error, (LiftError, NavigationError, TimedMoveError)) and stop_error.feedback is not None:
                         result['stop']['feedback'] = stop_error.feedback
         finally:
             if driver is not None:

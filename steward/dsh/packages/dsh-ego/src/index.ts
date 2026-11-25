@@ -45,6 +45,13 @@ export interface NavigateToPoseRequest {
   heading_tolerance_deg: number
 }
 
+/** Body-frame virtual joystick request; the runtime resolves speed and enforces its cap. */
+export interface MoveForDurationRequest {
+  direction: 'forward' | 'backward' | 'turn_left' | 'turn_right' | 'shift_left' | 'shift_right'
+  speed?: number
+  duration_s: number
+}
+
 /** Lift height in millimetres, or explicit downward homing. The runtime validates action-specific fields. */
 export interface LiftMoveRequest {
   action: 'height' | 'home'
@@ -117,6 +124,12 @@ export interface EgoNavigation {
 
 /** Optional parameterized motion capability; it does not imply ESim prediction support. */
 export interface EgoMotion {
+  /** Send body-frame velocity for a finite interval, then request zero velocity.
+   * @param request - direction, optional positive speed (default 0.2, maximum 0.5), duration 0.1–60 s.
+   * @param signal - cancellation propagated to a zero command and transport cleanup.
+   * @returns command outcome and stop-write evidence; neither distance nor physical rest is confirmed.
+   */
+  moveForDuration(request: MoveForDurationRequest, signal?: AbortSignal): Promise<JsonObject>
   /** Move to a map pose and wait for execution feedback.
    * @param request - target, tolerances and execution deadline.
    * @param signal - cancellation propagated to the runtime; cancellation is not proof of physical rest.

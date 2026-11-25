@@ -115,6 +115,40 @@
       "strict": false
     },
     {
+      "name": "move_for_duration",
+      "description": "Move the real chassis in its own body frame for a finite duration via the NAVIS virtual joystick. forward/backward translate along X; turn_left/turn_right rotate about Z; shift_left/shift_right translate along Y and require a chassis that supports lateral motion. Speed is a positive magnitude: default 0.2, hard maximum 0.5; translation uses m/s and rotation rad/s. Requires operator-provided direction and duration, clear space and no concurrent external controller/navigation task. No map target, localization, path planning or guaranteed obstacle avoidance. Publishes at 10 Hz and sends zero on completion or cancellation. state=succeeded means command transmission completed, NOT measured distance, angle or physical rest; inspect stop evidence and confirm rest before dependent work. Never automatically retry an uncertain result.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "direction": {
+            "type": "string",
+            "description": "Direction relative to the chassis; lateral shifts require compatible hardware.",
+            "enum": [
+              "forward",
+              "backward",
+              "turn_left",
+              "turn_right",
+              "shift_left",
+              "shift_right"
+            ]
+          },
+          "speed": {
+            "type": "number",
+            "description": "Positive magnitude, greater than 0 and at most 0.5. Default 0.2. m/s for translation, rad/s for turning; direction supplies the sign."
+          },
+          "duration_s": {
+            "type": "number",
+            "description": "Movement-command duration after connection/heartbeat, 0.1–60 seconds. Does not imply a precise traveled distance or turn angle."
+          }
+        },
+        "required": [
+          "direction",
+          "duration_s"
+        ]
+      },
+      "strict": false
+    },
+    {
       "name": "navigate_to_pose",
       "description": "Move the real chassis to one absolute map pose. x/y are meters; heading_deg is degrees from map +X. Requires the named map already loaded and localized. Fixed 0.1 m/s and 0.1 rad/s, obstacle avoidance enabled. Blocks until success or failure; inspect state before dependent actions. Never retry an uncertain outcome. No object locations or routes are inferred.",
       "parameters": {
@@ -336,6 +370,15 @@
         "timeout_s": 30,
         "open_grippers": false
       }
+    },
+    {
+      "path": "/execute",
+      "tool": "move_for_duration",
+      "arguments": {
+        "direction": "backward",
+        "speed": 0.3,
+        "duration_s": 2
+      }
     }
   ],
   "toolCalls": [
@@ -412,8 +455,32 @@
         "open_grippers": false
       },
       "status": "completed"
+    },
+    {
+      "tool": "move_for_duration",
+      "input": {
+        "direction": "backward",
+        "speed": 0.3,
+        "duration_s": 2
+      },
+      "status": "completed"
     }
   ],
+  "timedMoveResult": {
+    "state": "succeeded",
+    "command_stream_complete": true,
+    "direction": "backward",
+    "speed": 0.3,
+    "speed_unit": "m/s",
+    "duration_s": 2,
+    "commands_sent": 20,
+    "stop": {
+      "requested": true,
+      "write_acknowledged": true,
+      "controller_acknowledged": false,
+      "physical_stop_confirmed": false
+    }
+  },
   "navigationResult": {
     "state": "succeeded",
     "pose_valid": true,

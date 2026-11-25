@@ -20,6 +20,8 @@ export const zh = Object.freeze({
   skillsEmpty: '当前连接没有可用的真机 skill', skillLoading: '正在读取技能文本…',
   skillLoadFailed: '读取失败，折叠后重新展开可重试',
   toolNavigationState: '读取底盘导航状态', toolNavigationStateDetail: '从导航接口读取地图位置、朝向、定位有效性、任务和导航状态；不移动设备。',
+  toolTimedMove: '底盘定时移动', toolTimedMoveDetail: '按方向、速度和时长发送底盘指令；默认速度 0.2，上限 0.5，到时发送零速度。',
+  timedMoveUnverified: '定时指令已发送，物理停稳尚未确认',
   toolWam: 'WAM 提示词操作', toolWamDetail: '按提示词与 chunk 数操作双臂；执行完成不代表已验证物料任务成功。',
   toolArmsZero: '双臂归零', toolArmsZeroDetail: '双臂关节归零；显式选择是否张开夹爪，张开会释放持物。',
   toolNavigate: '地图目标导航', toolNavigateDetail: '给定地图坐标和朝向，控制底盘导航到目标位姿。',
